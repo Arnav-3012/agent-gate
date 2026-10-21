@@ -1,9 +1,10 @@
-.PHONY: up down llm engine ingest eval route-train deploy dash demo test
+.PHONY: up down llm smoke engine ingest eval route-train deploy dash demo test
 MODEL ?= mlx-community/Qwen2.5-7B-Instruct-4bit
 
 up:        ; docker compose up -d qdrant
 down:      ; docker compose down
 llm:       ; uv run mlx_lm.server --model $(MODEL) --port 8080
+smoke:     ; PYTHONPATH=. uv run python scripts/smoke_llm.py
 engine:    ; uv run uvicorn engine.api.main:app --port 8000 --reload
 ingest:    ; uv run python scripts/ingest.py
 eval:      ; uv run python eval/run_baselines.py && uv run python eval/benchmark.py
