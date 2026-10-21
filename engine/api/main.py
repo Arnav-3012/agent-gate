@@ -57,8 +57,8 @@ class Engine:
 
     def run(self, trace_id: str, req: RunRequest) -> None:
         """Runs one query to completion; run_rag/run_agent always end the trace with a stop."""
-        emitter = Emitter(trace_id, [JsonlSink(self.path(trace_id))], Ledger(self.pricing))
         llm = self.make_llm()
+        emitter = Emitter(trace_id, [JsonlSink(self.path(trace_id))], Ledger(self.pricing, llm.model))
         try:
             if req.mode == "rag":
                 run_rag(req.question, self.retriever, llm, emitter)

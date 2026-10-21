@@ -5,5 +5,8 @@
 reference_model: claude-haiku-5-5
 verified_on: 2026-10-21
 usd_per_1m_tokens: {input: 0.10, output: 0.50}
+# Size tiering (D29): decode cost per token scales with parameter count (~2N FLOPs/token), so the
+# 14B arm is priced at 2x the verified rate. An ASSUMPTION layered on a verified anchor, not a quote.
+model_multiplier: {qwen2.5-7b: 1.0, qwen2.5-14b: 2.0}
 retrieval_usd_per_query: 0.0   # local Qdrant; no verified cloud price, so 0 (revisit if hosted)
 infra_usd_per_query: 0.0       # AWS free tier; revisit with Phase 5 numbers

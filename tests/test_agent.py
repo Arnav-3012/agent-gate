@@ -117,6 +117,19 @@ def test_bad_json_twice_ends_in_error_stop() -> None:
     assert em.events[0].reason == "error" and "_Plan" in em.events[0].error
 
 
+def test_overlong_plan_is_clipped_not_rejected() -> None:
+    plan = '{"subqueries": ["a", "b", "c", "d"]}'
+    _, em, _ = run([plan, refl(0.9), "x"], {"a": ["1"]})
+    assert em.events[0].subqueries == ["a", "b", "c"] and em.events[-1].reason == "confidence"
+
+
+def test_repeated_next_query_is_dropped() -> None:
+    table = {"who directed Inception": ["a"], "birthplace of Nolan": ["b"]}
+    _, em, r = run([PLAN, refl(0.2, "who directed  inception"), refl(0.2), "x"], table)
+    assert r.queries == ["who directed Inception", "birthplace of Nolan"]  # no duplicate search
+    assert [e.next_query for e in em.events if e.type == "reflect"] == ["", ""]
+
+
 def test_out_of_range_confidence_is_rejected() -> None:
     table = {"who directed Inception": ["a"]}
     _, em, _ = run([PLAN, refl(85), refl(0.9), "x"], table)  # first reflect retried
@@ -128,7 +141,23 @@ def test_cfg_from_yaml_matches_file() -> None:
     assert (cfg.max_steps, cfg.max_tokens, cfg.confidence_threshold) == (4, 6000, 0.8)
 
 
-@pytest.mark.parametrize("bad", ['{"subqueries": []}', '{"subqueries": ["a","b","c","d"]}'])
+@pytest.mark.parametrize("bad", ['{"subqueries": []}', '{"subqueries": ["", " "]}'])
 def test_plan_bounds(bad: str) -> None:
     _, em, _ = run([bad, bad], {})
     assert em.events[0].reason == "error"
+
+
+def test_answer_system_prompt_is_configurable() -> None:
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        seen.append(body["messages"][0]["content"])
+        reply = {0: PLAN, 1: refl(0.9)}.get(len(seen) - 1, "x")
+        return httpx.Response(200, json={"choices": [{"message": {"content": reply},
+                              "finish_reason": "stop"}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
+
+    llm = LLMClient(base_url="http://x/v1", transport=httpx.MockTransport(handler))
+    run_agent("Q?", FakeRetriever({"who directed Inception": ["a"]}), llm, Emitter("t", []),
+              AgentConfig(answer_system="CUSTOM STYLE"))
+    assert seen[-1] == "CUSTOM STYLE"

@@ -22,6 +22,19 @@ def test_price_is_tokens_times_rate() -> None:
     assert Ledger(PRICING).price(stats(1_000_000, 1_000_000)) == pytest.approx(0.60)
 
 
+def test_model_multiplier_matches_substring() -> None:
+    p = PRICING.model_copy(update={"model_multiplier": {"qwen2.5-14b": 2.0}})
+    big = Ledger(p, "mlx-community/Qwen2.5-14B-Instruct-4bit").price(stats(1_000_000, 0))
+    assert big == pytest.approx(0.20)
+    assert Ledger(p, "mlx-community/Qwen2.5-7B-Instruct-4bit").price(stats(1_000_000, 0)) == pytest.approx(0.10)
+
+
+def test_repo_pricing_tiers_14b_at_double() -> None:
+    p = Pricing.from_yaml()
+    s = stats(1000, 100)
+    assert Ledger(p, "Qwen2.5-14B-x").price(s) == pytest.approx(2 * Ledger(p, "Qwen2.5-7B-x").price(s))
+
+
 def test_cached_tokens_not_discounted() -> None:
     s = stats(1000, 0)
     s.cached_tokens = 900

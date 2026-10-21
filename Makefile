@@ -1,10 +1,40 @@
-.PHONY: up down llm smoke smoke-rag smoke-agent engine ingest eval route-train deploy dash demo test
+.PHONY: up down llm llm14 judge-finance preflight eval-all clean-finance smoke-eval-finance-14b pareto-finance oracle-finance oracle-finance-14b ingest-finance smoke-eval-finance smoke smoke-rag smoke-agent smoke-eval smoke-eval-14b pareto engine ingest eval route-train deploy dash demo test
 MODEL ?= mlx-community/Qwen2.5-7B-Instruct-4bit
+MODEL14 ?= mlx-community/Qwen2.5-14B-Instruct-4bit
+MODES ?= rag,agent   # arms to run; run one at a time overnight, e.g. MODES=agent
+RESUME ?=            # RESUME=--resume continues an interrupted run (same PER/MODES/prompt only)
+PER ?= 10   # questions per type for eval targets; PER=5 for a quick run
 
 up:        ; docker compose up -d qdrant
 down:      ; docker compose down
 llm:       ; uv run mlx_lm.server --model $(MODEL) --port 8080
+llm14:     ; uv run mlx_lm.server --model $(MODEL14) --port 8081
 smoke:     ; PYTHONPATH=. uv run python scripts/smoke_llm.py
+smoke-eval: ; PYTHONPATH=. uv run python scripts/smoke_eval.py --per-type $(PER)
+smoke-eval-14b: ; PYTHONPATH=. uv run python scripts/smoke_eval.py --per-type $(PER) --model $(MODEL14) --base-url http://localhost:8081/v1 --tag 14b
+ingest-finance: ; PYTHONPATH=. uv run python scripts/ingest_finance.py
+smoke-eval-finance: ; PYTHONPATH=. uv run python scripts/smoke_eval.py --domain finance --per-type $(PER) --modes $(MODES) $(RESUME)
+smoke-eval-finance-14b: ; PYTHONPATH=. uv run python scripts/smoke_eval.py --domain finance --per-type $(PER) --modes $(MODES) $(RESUME) --model $(MODEL14) --base-url http://localhost:8081/v1 --tag 14b
+pareto-finance: ; PYTHONPATH=. uv run python eval/pareto.py eval/runs/smoke_eval_finance.json eval/runs/smoke_eval_finance_14b.json
+oracle-finance: ; PYTHONPATH=. uv run python scripts/smoke_eval.py --domain finance --per-type $(PER) --modes oracle,rag --tag oracle
+oracle-finance-14b: ; PYTHONPATH=. uv run python scripts/smoke_eval.py --domain finance --per-type $(PER) --modes oracle,rag --model $(MODEL14) --base-url http://localhost:8081/v1 --tag oracle14b
+preflight:
+	@curl -sf localhost:8080/v1/models >/dev/null || { echo "7B server down: make llm"; exit 1; }
+	@curl -sf localhost:8081/v1/models >/dev/null || { echo "14B server down: make llm14"; exit 1; }
+	@curl -sf localhost:6333/collections >/dev/null || { echo "Qdrant down: make up"; exit 1; }
+clean-finance: ; rm -f eval/runs/smoke_eval_finance*.json
+# One command for the whole Phase 2 closing run, in order (est. 1.5-2 h). Re-run with
+# `make eval-all RESUME=--resume` after an interruption: finished (question, arm) pairs are skipped.
+eval-all: preflight
+	$(MAKE) ingest-finance
+	$(MAKE) oracle-finance PER=5
+	$(MAKE) smoke-eval-finance PER=20
+	$(MAKE) smoke-eval-finance-14b PER=20
+	$(MAKE) smoke-eval-14b PER=10
+	$(MAKE) pareto | tee eval/runs/pareto_general.txt
+	$(MAKE) pareto-finance | tee eval/runs/pareto_finance.txt
+judge-finance: ; for f in eval/runs/smoke_eval_finance.json eval/runs/smoke_eval_finance_14b.json; do PYTHONPATH=. uv run python eval/judge.py $$f --model $(MODEL14) --base-url http://localhost:8081/v1; done
+pareto:    ; PYTHONPATH=. uv run python eval/pareto.py eval/runs/smoke_eval.json eval/runs/smoke_eval_14b.json
 engine:    ; uv run uvicorn engine.api.main:app --port 8000 --reload
 ingest:    ; PYTHONPATH=. uv run python scripts/ingest.py
 smoke-rag: ; PYTHONPATH=. uv run python scripts/smoke_rag.py

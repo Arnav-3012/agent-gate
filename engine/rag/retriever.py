@@ -59,14 +59,16 @@ class Retriever:
         embedder: Embedder | None = None,
         client: QdrantClient | None = None,
         top_k: int = 5,
+        collection: str = COLLECTION,
     ) -> None:
         self.embedder = embedder or Embedder()
         self.client = client or QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"))
         self.top_k = top_k
+        self.collection = collection
 
     def search(self, query: str, top_k: int | None = None) -> list[Hit]:
         res = self.client.query_points(
-            COLLECTION,
+            self.collection,
             query=self.embedder.query(query),
             limit=top_k or self.top_k,
             with_payload=True,

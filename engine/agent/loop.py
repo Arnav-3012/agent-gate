@@ -5,11 +5,11 @@ from pathlib import Path
 from typing import TypeVar
 
 import yaml
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from engine.llm.client import LLMClient, Message
 from engine.rag.retriever import Hit, Retriever
-from engine.rag.single_pass import build_messages
+from engine.rag.single_pass import SYSTEM, build_messages
 from engine.tracing import schema as ev
 from engine.tracing.emitter import Emitter
 
@@ -33,6 +33,7 @@ class AgentConfig(BaseModel):
     min_new_evidence: int = 1
     top_k: int = 5
     max_answer_tokens: int = 64
+    answer_system: str = SYSTEM  # answer-style prompt; same as the RAG arm's for a fair comparison
 
     @classmethod
     def from_yaml(cls, path: Path = Path("config/engine.yaml")) -> "AgentConfig":
@@ -47,6 +48,12 @@ class AgentConfig(BaseModel):
 
 class _Plan(BaseModel):
     subqueries: list[str] = Field(min_length=1, max_length=3)
+
+    @field_validator("subqueries", mode="before")
+    @classmethod
+    def _clip(cls, v: object) -> object:
+        """The model often over-plans (4 queries); keep the first 3 instead of failing the query."""
+        return [q for q in v if isinstance(q, str) and q.strip()][:3] if isinstance(v, list) else v
 
 
 class _Reflection(BaseModel):
@@ -70,6 +77,10 @@ def _ask_json(llm: LLMClient, messages: list[Message], model: type[M]) -> tuple[
             if attempt == 1:
                 raise ValueError(f"unparseable {model.__name__} reply: {call.text[:80]!r}") from None
     raise AssertionError("unreachable")
+
+
+def _norm(query: str) -> str:
+    return " ".join(query.lower().split())
 
 
 def _evidence_text(evidence: dict[str, Hit]) -> str:
@@ -99,7 +110,8 @@ def run_agent(
             Message(role="system", content=PLAN_SYSTEM), Message(role="user", content=question),
         ], _Plan)
         emitter.emit(ev.Plan, step=0, subqueries=plan.subqueries, llm=stats)
-        queue = list(plan.subqueries)
+        queue = list(dict.fromkeys(plan.subqueries))
+        asked: set[str] = set()  # normalized queries already run; never re-run one
         while steps < cfg.max_steps:
             if used() + step_cost + answer_reserve > cfg.max_tokens:  # projected, not just spent
                 reason = "max_tokens"
@@ -107,6 +119,7 @@ def run_agent(
             steps += 1
             before = used()
             query = queue.pop(0)
+            asked.add(_norm(query))
             t_ret = time.perf_counter()
             hits = retriever.search(query, top_k=cfg.top_k)
             emitter.emit(
@@ -123,8 +136,11 @@ def run_agent(
                         content=f"Question: {question}\n\nEvidence:\n{_evidence_text(evidence)}"),
             ], _Reflection)
             next_query = refl.next_query.strip()
+            if _norm(next_query) in asked:  # repeating a query cannot add evidence
+                next_query = ""
             if next_query:
                 queue.insert(0, next_query)
+            queue = [q for q in queue if _norm(q) not in asked]
             step_cost = used() - before
             answer_reserve = stats.prompt_tokens + cfg.max_answer_tokens
             if refl.confidence >= cfg.confidence_threshold:
@@ -137,7 +153,7 @@ def run_agent(
             )
             if reason != "max_steps":
                 break
-        call = llm.chat(build_messages(question, list(evidence.values())),
+        call = llm.chat(build_messages(question, list(evidence.values()), cfg.answer_system),
                         max_tokens=cfg.max_answer_tokens)
     except Exception as e:  # noqa: BLE001 - any backend/parse failure must still terminate the trace
         emitter.emit(

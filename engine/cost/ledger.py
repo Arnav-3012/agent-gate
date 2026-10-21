@@ -12,6 +12,9 @@ class Pricing(BaseModel):
     reference_model: str
     verified_on: date
     usd_per_1m_tokens: dict[str, float]
+    # Per-token price multiplier by local model, matched on a case-insensitive substring of the
+    # model id (first match wins, default 1.0). The verified rate anchors the smallest arm.
+    model_multiplier: dict[str, float] = {}
     retrieval_usd_per_query: float = 0.0
     infra_usd_per_query: float = 0.0
 
@@ -23,13 +26,16 @@ class Pricing(BaseModel):
 class Ledger:
     """One per query: prices each LLM call and accumulates the query total."""
 
-    def __init__(self, pricing: Pricing) -> None:
+    def __init__(self, pricing: Pricing, model: str = "") -> None:
         self.pricing = pricing
         self.llm_usd = 0.0
+        self.multiplier = next((m for k, m in pricing.model_multiplier.items()
+                                if k.lower() in model.lower()), 1.0)
 
     def price(self, stats: LLMStats) -> float:
         p = self.pricing.usd_per_1m_tokens
         usd = (stats.prompt_tokens * p["input"] + stats.completion_tokens * p["output"]) / 1e6
+        usd *= self.multiplier
         self.llm_usd += usd
         return usd
 
