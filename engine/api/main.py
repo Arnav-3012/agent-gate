@@ -14,7 +14,7 @@ from engine.api.health import Health
 from engine.cost.ledger import Ledger, Pricing
 from engine.llm.client import LLMClient
 from engine.rag.retriever import COLLECTION, Retriever
-from engine.rag.single_pass import run_rag
+from engine.rag.single_pass import FINANCE_SYSTEM, run_rag
 from engine.router.arms import Arm, ArmRegistry, run_arm
 from engine.tracing.dynamo import make_sinks
 from engine.tracing.emitter import Emitter
@@ -27,6 +27,7 @@ class RunRequest(BaseModel):
     question: str = Field(min_length=1)
     mode: Literal["rag", "agent"] = "rag"
     arm: str | None = None  # arm name from config/arms.yaml; overrides `mode` and is traced as the route
+    domain: Literal["general", "finance"] = "general"  # picks the Qdrant collection + answer prompt
     trace_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")  # set by the AWS router Lambda
 
 
@@ -52,14 +53,28 @@ class Engine:
         agent_cfg: AgentConfig | None = None,
         arms: ArmRegistry | None = None,
         make_arm_llm: Callable[[Arm], LLMClient] = Arm.make_llm,
+        finance_retriever: Retriever | None = None,
     ) -> None:
         self.retriever = retriever
+        self._finance = finance_retriever
         self.make_llm = make_llm
         self.trace_dir = trace_dir
         self.pricing = pricing or Pricing.from_yaml()
         self.agent_cfg = agent_cfg or AgentConfig.from_yaml()
         self.arms = arms or ArmRegistry.from_yaml()
         self.make_arm_llm = make_arm_llm
+
+    def _domain(self, domain: str) -> tuple[Retriever, AgentConfig, dict]:
+        """(retriever, agent config, answer kwargs): the same settings the eval runners use, so a
+        live finance query is the system that was measured. Finance retriever is built on first use."""
+        if domain != "finance":
+            return self.retriever, self.agent_cfg, {}
+        if self._finance is None:
+            self._finance = Retriever.from_config(finance=True, embedder=self.retriever.embedder,
+                                                  client=self.retriever.client)
+        kw = {"max_answer_tokens": 192, "system": FINANCE_SYSTEM}
+        return self._finance, self.agent_cfg.model_copy(
+            update={"max_answer_tokens": 192, "answer_system": FINANCE_SYSTEM}), kw
 
     def path(self, trace_id: str) -> Path:
         return self.trace_dir / f"{trace_id}.jsonl"
@@ -70,14 +85,15 @@ class Engine:
         llm = self.make_arm_llm(arm) if arm else self.make_llm()
         ledger = Ledger(self.pricing, llm.model, arm.price_multiplier if arm else None)
         emitter = Emitter(trace_id, make_sinks(self.path(trace_id)), ledger)
+        retriever, cfg, kw = self._domain(req.domain)
         try:
             if arm:
                 emitter.emit(RouteDecided, route=arm.name, reason="explicit arm")
-                run_arm(arm, req.question, self.retriever, llm, emitter, self.agent_cfg)
+                run_arm(arm, req.question, retriever, llm, emitter, cfg, kw)
             elif req.mode == "rag":
-                run_rag(req.question, self.retriever, llm, emitter)
+                run_rag(req.question, retriever, llm, emitter, **kw)
             else:
-                run_agent(req.question, self.retriever, llm, emitter, self.agent_cfg)
+                run_agent(req.question, retriever, llm, emitter, cfg)
         finally:
             llm.close()
 
@@ -91,7 +107,7 @@ def read_events(path: Path) -> list[TraceEvent]:
 def create_app(engine: Engine | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        app.state.engine = engine or Engine(Retriever())  # loads the embedder: slow, so once
+        app.state.engine = engine or Engine(Retriever.from_config())  # loads the embedder: slow, so once
         yield
 
     app = FastAPI(title="AgentGate engine", lifespan=lifespan)

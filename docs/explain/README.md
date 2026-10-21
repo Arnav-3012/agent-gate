@@ -20,8 +20,10 @@ Updated every time a file is added. Written/updated by `/sensei` after each phas
 - [phase-02-smoke-eval.md](phase-02-smoke-eval.md): 30-Q go/no-go (NO-GO: agent F1 0.387 vs RAG 0.487 on bridge, 5.1x cost), why retrieval is not the bottleneck, bootstrap CI + oracle router, the reframe to a multi-arm router (D24)
 - [phase-02-finance-corpus.md](phase-02-finance-corpus.md): FinanceBench, whitespace-collapsed 900-char windows, gold by evidence span, scoring rules, the accepted numeric limitation
 - [phase-02-eval-tooling.md](phase-02-eval-tooling.md): metrics, resumable `smoke_eval`, evidence oracle, Pareto + bootstrap CI + oracle router, offline LLM judge, `make eval-all`
-- [phase-03-eval-runners.md](phase-03-eval-runners.md): `run_baselines`, `benchmark.py` (results.json, finance headline split D38), judge validation with Cohen's kappa, tail-latency/SLO in `pareto.py`
+- [phase-03-eval-runners.md](phase-03-eval-runners.md): paired bootstrap, held-out cascade CV and hosted judge (D46), `run_baselines`, `benchmark.py` (results.json, finance headline split D38), judge validation with Cohen's kappa, tail-latency/SLO in `pareto.py`
 - [phase-04-router-machinery.md](phase-04-router-machinery.md): arm registry + trace schema v3, query features, router labels, cascade, semantic cache, LinUCB bandit + offline replay, calibrated logistic classifier; all built on synthetic data, thresholds unfitted
+- [phase-03-retrieval-scope.md](phase-03-retrieval-scope.md): retrieval fix test (company+fiscal-year scope, recall@k, one config for all arms, T1 results 35% -> 73%)
 - [phase-03-router-probe-set.md](phase-03-router-probe-set.md): hypothesis-first probe set (categories, expected arm, abstention scoring), `draw/run/report`, why probe rows stay out of the headline tables
 - [phase-07-reliability-scripts.md](phase-07-reliability-scripts.md): replay recorder, `decide_mode` live/replay fallback, failure drill, warm-up, demo script and README skeleton
 - [phase-05-aws-layer.md](phase-05-aws-layer.md): HTTP API + two Lambdas + DynamoDB trace table (TTL) + S3/CloudFront + $5 budget as CDK code, `DynamoSink`, engine-minted vs Lambda-minted trace id; synth only, nothing deployed
+- [phase-06-dashboard-pages.md](phase-06-dashboard-pages.md): what each dashboard page and section shows (header pill, Command Center, Benchmark)

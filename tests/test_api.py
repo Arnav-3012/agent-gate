@@ -152,3 +152,24 @@ def test_two_arms_run_through_their_own_clients_and_are_traced(tmp_path: Path) -
     assert [b["events"][0]["route"] for b in bodies] == ["small-rag", "big-rag"]
     small, big = (b["events"][-1]["total_cost_usd"] for b in bodies)
     assert big == pytest.approx(4 * small)
+
+
+def test_finance_domain_uses_finance_retriever_and_prompt(tmp_path: Path) -> None:
+    seen: dict = {}
+
+    class FinRetriever(FakeRetriever):
+        def search(self, query: str, top_k: int | None = None) -> list[Hit]:
+            seen["finance"] = True
+            return super().search(query, top_k)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["system"] = json.loads(request.content)["messages"][0]["content"]
+        return llm_ok(request)
+
+    engine = Engine(FakeRetriever(), finance_retriever=FinRetriever(), make_llm=lambda: LLMClient(
+        base_url="http://x/v1", transport=httpx.MockTransport(handler)), trace_dir=tmp_path,
+        pricing=Pricing(reference_model="m", verified_on="2026-10-21", usd_per_1m_tokens={"input": 0.1, "output": 0.5}),
+        agent_cfg=AgentConfig())
+    with TestClient(create_app(engine)) as c:
+        assert c.post("/run", json={"question": "q", "domain": "finance"}).status_code == 202
+    assert seen["finance"] and "financial filings" in seen["system"]

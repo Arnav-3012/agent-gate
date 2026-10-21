@@ -39,6 +39,7 @@ def test_rows_have_all_fields_and_level(tmp_path: Path) -> None:
     assert [r["level"] for r in rows] == ["easy", "hard"]
     assert {"em", "f1", "tokens", "cost", "latency", "stop", "gold_found", "rag_gold"} <= set(rows[0])
     assert rows[0]["f1"] == 1.0 and rows[0]["gold_found"] and rows[0]["rag_gold"]
+    assert rows[0]["top1"] == 0.9 and rows[0]["gap12"] == 0.9  # one hit: gap = its score
     assert json.loads(out.read_text())["model"] == "m"
 
 
@@ -52,3 +53,20 @@ def test_resume_skips_finished_pairs(tmp_path: Path) -> None:
     finally:
         FakeRetriever.search = orig
     assert calls == [] and len(rows) == 2
+
+
+def test_second_arm_process_keeps_first_arms_rows(tmp_path: Path) -> None:
+    out = tmp_path / "b.json"
+    go(out)  # rag
+    run_baselines(QS, ["agent"], out, "m", FakeRetriever(), make_llm, f1, Pricing.from_yaml(),
+                  AgentConfig.from_yaml(), {}, resume=True)
+    assert {r["mode"] for r in json.loads(out.read_text())["results"]} == {"rag", "agent"}
+
+
+def test_resume_refuses_a_changed_config(tmp_path: Path) -> None:
+    import pytest
+    out = tmp_path / "b.json"
+    args = (QS, ["rag"], out, "m", FakeRetriever(), make_llm, f1, Pricing.from_yaml(), AgentConfig.from_yaml(), {})
+    run_baselines(*args, meta={"top_k": 5})
+    with pytest.raises(SystemExit):
+        run_baselines(*args, resume=True, meta={"top_k": 8})

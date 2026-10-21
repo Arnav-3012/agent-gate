@@ -15,6 +15,7 @@ from engine.cost.ledger import Ledger, Pricing
 from engine.llm.client import LLMClient
 from engine.rag.retriever import Retriever
 from engine.rag.single_pass import FINANCE_SYSTEM, run_rag
+from engine.router.features import score_features
 from engine.tracing.emitter import Emitter
 from eval.metrics import exact_match, f1, finance_f1
 from scripts.smoke_eval import OracleRetriever, sample
@@ -33,26 +34,37 @@ def run_question(q: dict, mode: str, retriever, oracle: OracleRetriever, make_ll
     else:
         pred = run_rag(q["question"], oracle if mode == "oracle" else retriever, llm, em, **answer_kw)
     stop = em.events[-1]
-    seen = {h.chunk_id for e in em.events if e.type == "retrieve" for h in e.hits}
+    retrieves = [e for e in em.events if e.type == "retrieve"]
+    seen = {h.chunk_id for e in retrieves for h in e.hits}
+    # serve-time signals of the FIRST retrieval (what a cascade can see before answering)
+    top1, gap12, entropy = score_features([h.score for h in retrieves[0].hits] if retrieves else [])
     return {"id": q["id"], "type": q["type"], "level": q.get("level", "unknown"), "mode": mode,
             "pred": pred, "gold": q["answer"], "em": exact_match(pred, q["answer"]),
             "f1": score(pred, q["answer"]), "tokens": stop.total_tokens, "cost": stop.total_cost_usd,
             "latency": stop.total_latency_s, "stop": stop.reason, "steps": stop.steps,
-            "error": stop.error, "gold_found": set(q["gold_chunk_ids"]) <= seen, "rag_gold": rag_gold}
+            "error": stop.error, "gold_found": set(q["gold_chunk_ids"]) <= seen, "rag_gold": rag_gold,
+            "gold_any": bool(set(q["gold_chunk_ids"]) & seen),  # lenient recall: yes/no Qs need one window
+            "top1": top1, "gap12": gap12, "entropy": entropy}
 
 
 def run_baselines(qs: list[dict], modes: list[str], out: Path, model: str | None, retriever,
                   make_llm: Callable[[], LLMClient], score: Callable[[str, str], float],
-                  pricing: Pricing, cfg: AgentConfig, answer_kw: dict, resume: bool = False) -> list[dict]:
+                  pricing: Pricing, cfg: AgentConfig, answer_kw: dict, resume: bool = False,
+                  meta: dict | None = None) -> list[dict]:
     """Runs every missing (question, mode) pair, saving after each question so a crash loses nothing."""
-    results: list[dict] = json.loads(out.read_text())["results"] if resume and out.exists() else []
+    results: list[dict] = []
+    if resume and out.exists():
+        prev = json.loads(out.read_text())
+        if meta is not None and prev.get("config", meta) != meta:  # one config per result file (G4)
+            raise SystemExit(f"{out} was written with {prev['config']}, now {meta}: use a new --tag/--out")
+        results = prev["results"]
     done = {(r["id"], r["mode"]) for r in results}
     oracle = OracleRetriever(retriever)
     ids = {q["id"] for q in qs}
 
     def save() -> None:
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps({"model": model, "results": results}, indent=1))
+        out.write_text(json.dumps({"model": model, "config": meta, "results": results}, indent=1))
 
     for i, q in enumerate(qs, 1):
         todo = [m for m in modes if (q["id"], m) not in done]
@@ -66,9 +78,8 @@ def run_baselines(qs: list[dict], modes: list[str], out: Path, model: str | None
         print(f"[{i}/{len(qs)}] {q['type']:<18} " + " ".join(
             f"{r['mode']} f1={r['f1']:.2f} ({r['tokens']} tok)" for r in results[-len(todo):]), flush=True)
         save()
-    results = [r for r in results if r["mode"] in modes and r["id"] in ids]
-    save()
-    return results
+    save()  # keeps other arms' rows: arms run in separate processes on the same file
+    return [r for r in results if r["mode"] in modes and r["id"] in ids]
 
 
 def main() -> None:
@@ -80,6 +91,10 @@ def main() -> None:
     ap.add_argument("--model", default=None, help="LLM model id (default: LLM_MODEL env)")
     ap.add_argument("--base-url", default=None, help="LLM server (default: LLM_BASE_URL env)")
     ap.add_argument("--tag", default="", help="suffix for the output file, e.g. 14b")
+    ap.add_argument("--out", default=None, help="result file (default eval/runs/baseline_<domain>[_tag].json); "
+                    "the fix test uses eval/runs/fixtest_*.json so the smoke_eval baselines stay untouched")
+    ap.add_argument("--max-tokens", type=int, default=None,
+                    help="agent per-query token budget (default config/engine.yaml max_tokens_per_query)")
     ap.add_argument("--resume", action="store_true", help="skip (question, mode) pairs already in the file")
     ap.add_argument("--exclude-types", default=None,
                     help="comma list of question types to skip AFTER sampling (keeps other types' questions "
@@ -97,15 +112,21 @@ def main() -> None:
     skip = set(filter(None, exclude.split(",")))
     qs = [q for q in sample(rows, a.per_type, a.seed, stable=True) if q["type"] not in skip]
     cfg = AgentConfig.from_yaml()
+    if a.max_tokens:
+        cfg = cfg.model_copy(update={"max_tokens": a.max_tokens})
     answer_kw: dict = {}
     if fin:  # sentence-length gold answers: lift the short-answer prompt and token cap on every arm
         answer_kw = {"max_answer_tokens": 192, "system": FINANCE_SYSTEM}
         cfg = cfg.model_copy(update={"max_answer_tokens": 192, "answer_system": FINANCE_SYSTEM})
     tag = "_".join(t for t in (a.domain, a.tag) if t)
-    out = Path(f"eval/runs/baseline_{tag}.json")
-    run_baselines(qs, modes, out, a.model, Retriever(collection="finance") if fin else Retriever(),
+    out = Path(a.out or f"eval/runs/baseline_{tag}.json")
+    retriever = Retriever.from_config(finance=fin)
+    run_baselines(qs, modes, out, a.model, retriever,
                   lambda: LLMClient(base_url=a.base_url, model=a.model),
-                  finance_f1 if fin else f1, Pricing.from_yaml(), cfg, answer_kw, a.resume)
+                  finance_f1 if fin else f1, Pricing.from_yaml(), cfg, answer_kw, a.resume,
+                  meta={"top_k": cfg.top_k, "metadata_filter": retriever.metadata_filter,
+                        "max_tokens": cfg.max_tokens, "max_answer_tokens": cfg.max_answer_tokens,
+                        "seed": a.seed, "per_type": a.per_type})
     print(f"wrote {out}")
 
 

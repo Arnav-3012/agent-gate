@@ -111,7 +111,7 @@ def main() -> None:
     skip = set(filter(None, a.exclude_types.split(",")))
     qs = [q for q in sample(rows, a.per_type, a.seed, stable=fin) if q["type"] not in skip]
     score = finance_f1 if fin else f1
-    retriever = Retriever(collection="finance") if fin else Retriever()
+    retriever = Retriever.from_config(finance=fin)
     pricing, cfg = Pricing.from_yaml(), AgentConfig.from_yaml()
     answer_kw = {"max_answer_tokens": 192, "system": FINANCE_SYSTEM} if fin else {}
     if fin:  # sentence-length gold answers: lift the short-answer prompt and token cap on every arm

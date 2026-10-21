@@ -1,0 +1,91 @@
+PROBLEM: T1 lifted finance gold-recall 35%->73% but end-to-end F1 (T2/T3) may stay flat; decide what to do (raise token max vs something smarter) before the Phase 3 main eval.
+DOMAINS: LLM(RAG+agent) + eval/stats (metric validity, power) + systems(cost/latency)
+IN: fixtest_t2_rag.json (7B RAG, 20 finance text Qs), fixtest_t3_agent6000/9000.json (7B agent, 10 Qs), smoke_eval*.json baselines, oracle file
+OUT: a decision rule per outcome, written BEFORE seeing the numbers   SUCCESS: Phase 3 starts on a retriever+budget+metric whose numbers mean something
+GIVENS: 7B/14B 4-bit local; token-F1 on sentence answers; n=20/10 in the test; 30-min hard stop, no new features inside it; approval gate on installs/APIs
+HIDDEN_REQS: decisions must be fixed before Phase 3 (one config for all arms); every claim needs a file in eval/runs/; no tuning on the test slice
+ASSUMPTIONS: "not promising" = F1 delta small/flat, not errors; text Qs only (numeric excluded D38/39)
+OPEN_QS: does the agent's planner drop the company name (unscoped steps)? is the hosted judge (D42) approved before Phase 3?
+
+BIG_PICTURE: "Flat F1 after a recall jump" is the EXPECTED result under token-F1, not a failure signal. Baseline text Qs: F1 0.30 when gold found vs 0.17 when missed (both 7B and 14B; oracle context only 0.195). Recall 48%->73% on text Qs predicts F1 ~0.232->0.265 = +0.03, while n=20 gives CI half-width ~0.1. So T2 cannot detect the F1 gain; judge the fix by MECHANISM (gold_found rate, F1 hit-vs-miss) not by headline F1. Raising max tokens is the wrong lever: RAG has no search budget; the agent budget only caps extra retrieval steps (answer call always runs); answer cap 192 shows no truncation in saved preds.
+CUT: dependency order metric -> retrieval/generation mechanism -> agent budget -> contingency actions ranked by cost. Prediction (is the fix working?) separated from decision (what to change).
+
+LEAVES:
+[1] Is the fix working? (mechanism check)
+  type: eval > diagnostic > recall vs reader decomposition
+  why: F1 = P(hit)*F1_hit + (1-P(hit))*F1_miss; the fix moves only P(hit)
+  why_not: not "compare mean F1 old vs new at n=20" (underpowered, metric-noisy)
+  approaches: gold_found rate in T2 run (free) | F1 hit vs miss rows | paired diff vs smoke rows same ids (noisy) 
+  pick: gate on gold_found >= 60% in the generation run AND F1_hit > F1_miss; report F1 delta as informative only
+  concept: expected gain = (P_new - P_old)*(F1_hit - F1_miss) ~ (0.73-0.48)*0.13 ~ +0.03; SE at n=20 ~0.05 -> invisible
+  trap: declaring failure (or success) from a +/-0.03 swing
+  eval: fixtest_report.py hit/miss lines; gold_found vs T1 recall agree (same retriever)
+  confidence: high
+[2] Reader/metric ceiling (why F1_hit is only ~0.30)
+  type: eval validity > metric + LLM reading capability
+  why: gold-in-context rows still 0.30 F1; sentence golds vs token overlap; oracle-context text F1 0.195 (n=10) i.e. retrieval is not the only cap
+  why_not: not a retrieval problem (gold present); not fixable by tokens
+  approaches: hand-label the 20 T2 answers correct/partial/wrong (free, 10 min) | hosted Haiku judge D42 (needs go+key, ~$0.02) | local 14B judge (self-preference)
+  pick: hand-label T2's 20 rows now to see if "correct but low F1" dominates; run hosted judge on Phase 3 answers (post-hoc, no rerun)
+  concept: token-F1 measures overlap, a judge measures meaning; judge must be validated (kappa=(p_o-p_e)/(1-p_e) >= 0.6)
+  trap: tuning retrieval/agent against a ruler that mis-scores correct answers
+  eval: share of hit rows hand-judged correct vs their F1; kappa on 30 rows
+  confidence: medium (depends on hand labels)
+[3] Agent budget (T3)
+  type: LLM agent > stopping-rule audit
+  why: stop=max_tokens halts SEARCH only; 6000 gives ~2 finance steps (each ~1.5k tok)
+  why_not: not "agent cut off before answering" (answer call is outside the loop)
+  approaches: keep 6000, report as measured | 9000 (G3) | scope-aware subqueries (pass the question's company/year to every subquery)
+  pick: follow G3; if agent still dominated at 9000 -> keep 6000, label "dominated, measured negative arm"
+  concept: agent value = P(first retrieval bad)*P(retry fixes) - P(retry breaks good); a cap truncates the retry term
+  trap: raising the cap blindly (cost x1.5, same F1) and then shipping the higher cost into the Pareto
+  eval: stop histogram (max_tokens < 10%) + F1 + tokens at 6000 vs 9000, gold_found per step
+  confidence: medium
+[4] Retrieval residual (27% still missing; domain-relevant 60%)
+  type: RAG > retrieval > remaining recall errors after filter
+  why: filter fixes wrong-filing; remaining misses are right filing, wrong page/window, or multi-window gold (recall needs ALL gold chunks)
+  why_not: not a parser problem (59/60); not hybrid/rerank yet (G1 passed)
+  approaches: neighbour-window expansion (add adjacent windows of the same page, no install) | doc-type/period preference (10k vs 10q/8k) | BM25 hybrid + cross-encoder rerank (install, approval, only if recall < 70% on a larger slice)
+  pick: classify T1 misses by cause from fixtest_recall.json first; only then choose
+  concept: recall@k vs precision: larger k raises recall but adds distractors that a 7B reader mishandles ("lost in the middle")
+  trap: raising top_k again: context +60% per arm, cost on every arm, little F1
+  eval: recall on 60 Qs + F1 hit/miss; never tune on the 20 T2 rows
+  confidence: medium
+[5] Contingency decision rule (written now)
+  type: decision > pre-registered gates
+  why: choosing after seeing numbers invites fitting the test slice
+  approaches: see RULES
+  pick: RULES below
+  concept: pre-registration = fix the decision rule before the data
+  trap: "one more tweak" inside the 30-min test (breaks the hard stop)
+  eval: each outcome maps to exactly one action
+  confidence: high
+
+RULES (T2/T3 outcomes -> action)
+- A) gold_found >=60% and F1_hit > F1_miss, F1 flat/up: fix works, F1 gain just below noise. Start Phase 3 as configured.
+- B) F1_hit ~ F1_miss (gold present but not used): reader/metric problem. Hand-label the 20 rows; if most hit rows are correct, the ruler is the issue -> get the judge go before reporting finance numbers; if wrong, it is 7B capability -> 14B is the reader, router decides. No retrieval changes.
+- C) gold_found in T2 < ~60% although T1 said 73%: bug in wiring (config not applied, agent/RAG path) -> fix, rerun T1/T2. Check Retriever.from_config usage.
+- D) F1 DROPS vs baseline and misses fell: context noise from top_k 8. Run scope@5 vs scope@8 comparison on same 20 Qs (one extra 10-min run) and choose by hit/miss F1 + tokens; do not guess.
+- E) T3: 9000 cuts max_tokens stops <10% AND F1 up -> adopt 9000; else keep 6000, agent = measured negative arm. Do not build corrective-RAG unless retry shows a hit-rate gain.
+- F) Recall residual: if the 15-27 remaining misses are mostly "right filing wrong window" -> try neighbour expansion (no install). Hybrid/rerank only if recall < 70% on the larger Phase 3 slice (needs Arnav's yes).
+- G) Never: raise max_answer_tokens/max_tokens as a general fix (no truncation seen; RAG unaffected), tune on the T2/T3 slice, rerun Phase 2.
+
+DEPENDENCIES: 1 and 2 independent (both read the same T2 file); 3 independent; 4 reads T1 misses; 5 depends on all
+RISKIEST_LEAF: 2 - if the ruler under-scores correct answers, every downstream F1 (labels, cascade, Pareto) is noise and no retrieval gain will show
+KEY_FORMULAS:
+  F1 = p_hit*F1_hit + (1-p_hit)*F1_miss
+  expected gain = (p_new - p_old)*(F1_hit - F1_miss)
+  SE(mean F1, n) ~ sd/sqrt(n)  (sd ~0.3 -> 0.07 at n=20)
+  kappa = (p_o - p_e)/(1 - p_e)
+GLOSSARY: gold_found = all gold chunks among retrieved | scope = company+FY filter | oracle = gold chunks given as context | G1-G4 = fix-test gates | hit/miss = gold found or not
+BRAINSTORM_SEEDS:
+- pre-register the decision rules in decision.md before pasting the report
+- hand-label 20 T2 answers: cheapest way to learn if the ruler or the reader is the cap
+- neighbour-window expansion as a no-install recall fix for multi-window evidence
+- pass the question's scope to agent subqueries
+- report finance F1 hit-only and miss-only separately in the final table
+
+RESULT (2026-10-21, fixtest-report):
+- T2 7B RAG n=20: gold seen 14/20 (70%, matches T1) vs 9/20; F1 0.222 vs 0.210 (+0.012, as predicted, inside noise); hit 0.235 / miss 0.192 (baseline 0.286 / 0.147); tokens 2232 vs 1608 (+39%, top_k 8).
+- T3 7B agent n=10: 6000 -> F1 0.199, gold seen 9/10 (baseline 4/10), tok 5171, max_tokens stops 7/10; 9000 -> F1 0.175, gold 10/10, tok 8086 (+56%), max_tokens stops 6/10.
+- Rule A holds (gold >=60%, hit>miss). Rule B partly: hit-miss gap shrank 0.14 -> 0.04; newly retrieved questions are the hard ones, reading/metric caps F1. Rule E: 9000 fails G3 (stops 60% >= 10%, F1 down, +56% tokens) -> keep 6000, agent = measured negative arm.

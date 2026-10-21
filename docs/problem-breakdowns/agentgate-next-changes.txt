@@ -1,0 +1,119 @@
+PROBLEM: AgentGate (router over RAG-7B/RAG-14B/agent arms, FinanceBench text Qs + HotpotQA slice) has first eval results; decide what must change before Phase 3 scale-up and before any "real-world" claim.
+DOMAINS: LLM(RAG+agent) + eval/stats + routing(cost-quality) + systems(latency/cost)
+IN: ~40 finance Qs (metrics-generated excluded), 30 general Qs, 4 arms (7B/14B x RAG/agent), token-F1, modelled cost
+OUT: a defensible cost-vs-quality Pareto + a router that beats best single arm at lower cost
+SUCCESS: router F1 >= best fixed arm at lower $/1k, on HELD-OUT Qs, CIs on the difference excluding 0; every number traceable to eval/runs/
+GIVENS: M4 24GB local, Qwen2.5 7B/14B 4bit, top_k 5 x 900-char chunks, config/engine.yaml max_steps 4, max_tokens_per_query 6000, demo-first, approval gate on installs/APIs/design choices
+HIDDEN_REQS: latency target <=10s (14B finance RAG only 20% within, agents 0-12%); judge validated vs humans (kappa>=0.6); retrieval changes applied to ALL arms equally
+ASSUMPTIONS: agent stop=max_tokens means the 6000-token per-query budget was hit (not read in code, confirm); gold_found==rag_gold means "gold evidence chunk in top-5"
+OPEN_QS: is the agent token budget a design choice or a bug-in-effect? does a metadata filter (company+FY) fit the corpus schema? is the Haiku judge go + key available?
+
+BIG_PICTURE: Results say (a) agent never on the Pareto frontier, (b) finance arms indistinguishable (F1 0.23-0.26, CIs overlap), (c) the measurement itself is the weakest part: token-F1 scores a correct answer 0.22 ("$1,824 million" vs gold "$1.8 bn") and finance retrieval hits gold in only 21/60 (35%). Fix the ruler and the retrieval before tuning any router; otherwise router labels are noise.
+CUT: by what the conclusions depend on, in dependency order: metric -> retrieval -> agent arm validity -> statistical power -> router -> claims. Prediction (which arm is right) separated from decision (cost-aware pick).
+
+LEAVES:
+[1] Metric validity (sentence answers)
+  type: LLM eval > answer correctness > LLM-as-judge replacing token-F1
+  why: finance gold answers are sentences; sample: correct "$1,824 million" scored 0.22; 22/60 RAG rows F1<0.05 in both models; EM = 0.0 everywhere
+  why_not: not EM/F1 (format-sensitive) | not ROUGE/BLEU (same failure) | not human-only (n too big to scale, but needed for validation)
+  approaches: keep F1 + finance_f1 for numerics (baseline) | local 14B judge (free, self-preference) | hosted Haiku judge reference-guided (D42, best, needs key+go)
+  pick: hosted judge on sentence Qs, validate on 30 hand-labelled rows, kappa>=0.6 else fall back; keep numeric Qs on finance_f1
+  concept: Cohen kappa = (p_o - p_e)/(1 - p_e), agreement beyond chance; a judge is a classifier whose accuracy must be measured before use
+  trap: judge model grades its own family's answers higher (self-preference); trusting judge without human labels
+  eval: kappa vs human on stratified 30 rows; report judged-F1 next to token-F1
+  confidence: high
+
+[2] Retrieval recall (finance)
+  type: RAG > retrieval > recall@k improvement (hybrid + rerank + metadata filter)
+  why: rag_hit 21/60 = 35%; 7B RAG F1 0.32 on hit vs 0.14 on miss; general rag_hit 23/30 = 77% (F1 0.62 vs 0.29); agent does not rescue misses (0.16 vs 0.14 finance 7B). Sample: Boeing Q answered "no legal battles" = wrong chunk retrieved.
+  why_not: not a model-size problem (14B misses equally: 21/60 both) | not a prompt problem (hit/miss gap is large and mechanical)
+  approaches: raise top_k 5->8 (cheap baseline) | metadata filter on company+fiscal year parsed from the Q (FinanceBench Qs name both) | hybrid BM25+dense + cross-encoder rerank (heavy, needs install approval)
+  pick: metadata filter first (free, high leverage), then top_k 8, then hybrid/rerank only if recall@k still <70%; apply to every arm
+  concept: recall@k = fraction of Qs whose gold chunk is in top-k; end-to-end F1 <= f(recall); measure retrieval separately from generation
+  trap: tuning prompts/router while 65% of Qs never see the answer
+  eval: recall@5 and @8 on the 60 finance Qs (rag_gold), then F1 split hit/miss
+  confidence: high
+
+[3] Agent arm validity
+  type: LLM agent > loop budget/stopping criteria audit
+  why: finance agent stop=max_tokens in 36/60 (7B) and 21/60 (14B); budget 6000 tok vs ~5k mean usage; 60% of 7B finance agent runs were cut off before answering confidently; "agent loses" is partly a budget artefact
+  why_not: not proof agent is bad (confounded) | not necessarily raise cap blindly (cost explosion)
+  approaches: leave as is and disclose (cheap) | raise budget to ~9-10k and rerun a subset (tests the confound) | replace with fixed 2-step corrective-RAG (retrieve -> if low score rewrite query -> retrieve again), which is a pipeline not an agent
+  pick: rerun agent on a subset with higher budget AFTER the retrieval fix; if still dominated, drop agent from the headline and keep as a measured negative result; add corrective-RAG arm as the cheap "retry" arm
+  concept: agent value = P(retry fixes bad first retrieval) - P(retry breaks good retrieval); a budget cap truncates the retry before it can pay
+  trap: concluding "agents are useless" from runs truncated by your own cap
+  eval: stop-reason histogram (target: max_tokens < 10%), F1 vs cost at 2 budgets
+  confidence: medium (need to read agent loop code to confirm stop semantics)
+
+[4] Statistical power and honest comparison
+  type: stats > paired comparison + held-out router evaluation
+  why: n=40/30, per-arm CI half-width ~0.06-0.16, arms overlap; oracle-router = max of 4 noisy arms on the same Qs -> upward biased (+0.06 finance, +0.07 general)
+  why_not: not per-arm CIs (overlap tells nothing about differences) | not oracle as an estimate (it is a ceiling)
+  approaches: more Qs (Phase 3: ~300 general + 100 finance) | paired bootstrap of F1 differences | cross-validated router (fit labels on folds, score held-out)
+  pick: all three; headline = held-out router vs best fixed arm with paired CI
+  concept: paired bootstrap resamples questions, recomputes mean(F1_A - F1_B); CI of the difference excludes 0 -> real
+  trap: ranking arms by point estimates inside overlapping CIs; selecting router thresholds on the test set
+  eval: CI of (router - best fixed) on held-out folds
+  confidence: high
+
+[5] Router design
+  type: routing > cost-aware cascade over arms
+  why: agent dominated, so real choice = 7B RAG vs 14B RAG (+ optional retry arm); general: 14B RAG 0.656 vs 7B 0.544 (+0.11 for 2x cost); finance +0.03 (noise) at 2x cost
+  why_not: not a learned multi-class router yet (labels too noisy at n=40) | not RAG-vs-agent as the headline (dominated)
+  approaches: always-7B RAG (baseline) | cascade: 7B RAG, escalate to 14B if confidence/retrieval score low | learned classifier on query features (needs ~300+ labels)
+  pick: cascade with serve-time signals (top-1 retrieval score, score margin, answer abstention/length, model logprob if available); fit threshold by CV
+  concept: cost-quality Pareto; router is useful iff separable signal exists at serve time (gold answers do not)
+  trap: labels from offline F1 that a serve-time router cannot see
+  eval: held-out F1 vs $/1k vs always-7B and always-14B; escalation rate (health ~5-30%, check vs oracle)
+  confidence: medium (depends on [1],[2] results)
+
+[6] Claims and framing
+  type: communication > defensible claims
+  why: 14B finance fails 10s latency; AWS layer synth-only; local single user; judge not yet run
+  why_not: not "production-grade" | not "router saves X%" before held-out CI
+  approaches: README claims table: claim -> file in eval/runs/ that supports it
+  pick: "research-grade, production-shaped"; lead with the measured negative result and the cascade finding
+  concept: every resume number must trace to a run file
+  trap: citing the oracle number as router performance
+  eval: each claim has a path
+  confidence: high
+
+DEPENDENCIES: 1 and 2 independent (parallel); 2 -> re-run all arms -> 3 -> 4 -> 5 -> 6
+RISKIEST_LEAF: 1 - if the metric is invalid every downstream number (labels, oracle gain, Pareto) is noise; second risk is 2 (65% of finance Qs unanswerable)
+KEY_FORMULAS:
+  kappa = (p_o - p_e) / (1 - p_e)
+  recall@k = (# Qs with gold chunk in top-k) / N
+  agent_wins iff P(first retrieval bad)*P(retry fixes) > P(retry breaks good retrieval)
+  paired diff CI: bootstrap over Qs of mean(F1_A - F1_B)
+  cost per 1k = 1000 * mean(tokens_in*p_in + tokens_out*p_out)
+GLOSSARY: rag_hit=gold evidence chunk in top-5 (rag_gold/gold_found) | oracle-router=per-question best arm (upper bound, optimistic) | gold-context(oracle) mode=model given gold passage | cascade=cheap arm first, escalate if low confidence | corrective RAG=retrieve, check, rewrite+retry once
+BRAINSTORM_SEEDS:
+- query-time metadata filter by company+FY could lift recall more than any reranker, at near zero cost
+- corrective-RAG as a fixed 2-step arm may give most of the agent's rescue benefit at ~1/3 the cost
+- confidence signal for the cascade from retrieval score margin; test its AUC for predicting 7B failure
+- report router value as "cost safety" if held-out gain over best fixed arm is not significant
+- per-category breakdown (domain-relevant / novel-generated) of where 14B actually helps
+
+=====================================================================
+DECISION (2026-10-21): NO PHASE 2 RERUN. 30-MIN FIX TEST -> PHASE 3 MAIN EVAL
+=====================================================================
+WHY: Phase 3 reruns every arm on ~300 general + 100 finance Qs, so rerunning Phase 2 (60 finance + 30 general x 4 arms, ~2h) only reproduces numbers that get overwritten. Keep eval/runs/smoke_eval*.json as the BEFORE baseline; do not overwrite them (write the test to eval/runs/fixtest_*.json).
+WHAT MUST BE DECIDED BEFORE PHASE 3 (baked into the run): retrieval config (filter, top_k), agent token budget. WHAT CAN WAIT: judge (post-hoc on saved answers), router fit, dashboard, AWS.
+
+30-MIN TEST (budget hard stop at 30 min; no new features during it)
+T1 retrieval only, NO LLM (~5 min): recall@5 and recall@8 on the 60 finance Qs (rag_gold), for A) current, B) company+FY metadata filter, C) filter + top_k 8. General slice: confirm no regression (23/30 baseline).
+T2 generation spot check (~10 min): 7B RAG on 20 finance Qs with the best config from T1; compare F1 on hit vs miss vs the smoke_eval_finance.json rows for the same ids.
+T3 agent budget check (~10 min): 7B agent on 10 finance Qs at max_tokens_per_query 6000 vs 9000 (same retrieval config). Record stop-reason histogram + F1 + tokens.
+T4 (5 min) write results to docs/log.md; decide with the gates below.
+
+GATES
+- G1 retrieval: recall@5 (or @8) on finance >= 60% (baseline 35%). If filter alone gets it, no reranker/hybrid, no install. If <60% after filter+top_k 8, STOP and propose BM25-hybrid/rerank to Arnav (needs approval) before Phase 3; Phase 3 then waits.
+- G2 no regression: general recall >= 23/30 and no rise in errors (baseline 0).
+- G3 agent: if 9000 cuts max_tokens stops below 10% AND F1 improves, adopt 9000 for Phase 3 (cost reported at the new budget); if still dominated, keep 6000 and mark agent "dominated, kept as measured negative arm". Do NOT build the corrective-RAG arm now (backlog unless G3 shows retry helps).
+- G4 apply the same retrieval config to ALL arms (7B/14B x RAG/agent). One config for the whole run.
+FAIL RULE: if G1 fails, do not run Phase 3 on a 35%-recall retriever; fix or decide to report recall as a limitation explicitly.
+
+THEN PHASE 3 (unchanged plan, with the fixes baked in)
+- run_baselines.py ~300 general + 100 finance text Qs (numeric skipped, D39), one arm per process, overnight, --resume, 7B first (RAG, agent), then 14B.
+- After the runs: judge (hosted Haiku D42, needs Arnav go + key; sample 30, hand-label, kappa), paired bootstrap on arm differences, benchmark.py -> results.json, router cascade fit with cross-validated held-out scoring, claims table (leaf 6).
+- Log decisions: D43 retrieval fix, D44 agent budget, D45 no Phase 2 rerun.

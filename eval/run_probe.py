@@ -156,7 +156,7 @@ def main() -> None:
             cfg = cfg.model_copy(update={"max_answer_tokens": 192, "answer_system": FINANCE_SYSTEM})
         out = Path(f"eval/runs/probe/probe_{'_'.join(t for t in (a.domain, a.tag) if t)}.json")
         run_baselines([q.as_eval_row() for q in qs], a.modes.split(","), out, a.model,
-                      Retriever(collection="finance") if fin else Retriever(),
+                      Retriever.from_config(finance=fin),
                       lambda: LLMClient(base_url=a.base_url, model=a.model),
                       finance_f1 if fin else f1, Pricing.from_yaml(), cfg, kw, a.resume)
         print(f"wrote {out}")

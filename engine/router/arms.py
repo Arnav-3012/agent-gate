@@ -52,8 +52,8 @@ class Router(Protocol):
 
 
 def run_arm(arm: Arm, question: str, retriever: Retriever, llm: LLMClient, emitter: Emitter,
-            agent_cfg: AgentConfig) -> str:
+            agent_cfg: AgentConfig, answer_kw: dict | None = None) -> str:
     """Runs the arm's mode with the given client (callers build it from the arm, tests inject mocks)."""
     if arm.mode == "agent":
         return run_agent(question, retriever, llm, emitter, agent_cfg)
-    return run_rag(question, retriever, llm, emitter)
+    return run_rag(question, retriever, llm, emitter, **(answer_kw or {}))
