@@ -16,7 +16,8 @@ from engine.llm.client import LLMClient
 from engine.rag.retriever import COLLECTION, Retriever
 from engine.rag.single_pass import run_rag
 from engine.router.arms import Arm, ArmRegistry, run_arm
-from engine.tracing.emitter import Emitter, JsonlSink
+from engine.tracing.dynamo import make_sinks
+from engine.tracing.emitter import Emitter
 from engine.tracing.schema import RouteDecided, TraceEvent, event_adapter
 
 TRACE_ID = re.compile(r"^[0-9a-f]{32}$")  # also keeps ids from escaping trace_dir
@@ -26,6 +27,7 @@ class RunRequest(BaseModel):
     question: str = Field(min_length=1)
     mode: Literal["rag", "agent"] = "rag"
     arm: str | None = None  # arm name from config/arms.yaml; overrides `mode` and is traced as the route
+    trace_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")  # set by the AWS router Lambda
 
 
 class RunAccepted(BaseModel):
@@ -67,7 +69,7 @@ class Engine:
         arm = self.arms.get(req.arm) if req.arm else None
         llm = self.make_arm_llm(arm) if arm else self.make_llm()
         ledger = Ledger(self.pricing, llm.model, arm.price_multiplier if arm else None)
-        emitter = Emitter(trace_id, [JsonlSink(self.path(trace_id))], ledger)
+        emitter = Emitter(trace_id, make_sinks(self.path(trace_id)), ledger)
         try:
             if arm:
                 emitter.emit(RouteDecided, route=arm.name, reason="explicit arm")
@@ -105,7 +107,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
                 e.arms.get(req.arm)
             except KeyError as err:
                 raise HTTPException(422, str(err.args[0])) from err
-        trace_id = uuid.uuid4().hex
+        trace_id = req.trace_id or uuid.uuid4().hex
         e.trace_dir.mkdir(parents=True, exist_ok=True)
         e.path(trace_id).touch()  # so an immediate GET /trace/{id} is "pending", not 404
         background.add_task(e.run, trace_id, req)  # sync fn: Starlette runs it in a threadpool

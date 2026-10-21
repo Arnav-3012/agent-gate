@@ -1,4 +1,4 @@
-.PHONY: up down llm llm14 pareto-finance-all judge-finance preflight eval-all clean-finance smoke-eval-finance-14b pareto-finance oracle-finance oracle-finance-14b ingest-finance smoke-eval-finance smoke smoke-rag smoke-agent smoke-eval smoke-eval-14b pareto engine ingest eval route-train deploy dash demo test
+.PHONY: synth up down llm llm14 pareto-finance-all judge-finance preflight eval-all clean-finance smoke-eval-finance-14b pareto-finance oracle-finance oracle-finance-14b ingest-finance smoke-eval-finance smoke smoke-rag smoke-agent smoke-eval smoke-eval-14b pareto engine ingest eval route-train deploy dash demo test
 MODEL ?= mlx-community/Qwen2.5-7B-Instruct-4bit
 MODEL14 ?= mlx-community/Qwen2.5-14B-Instruct-4bit
 MODES ?= rag,agent   # arms to run; run one at a time overnight, e.g. MODES=agent
@@ -45,7 +45,8 @@ smoke-rag: ; PYTHONPATH=. uv run python scripts/smoke_rag.py
 smoke-agent: ; PYTHONPATH=. uv run python scripts/smoke_agent.py
 eval:      ; uv run python eval/run_baselines.py && uv run python eval/benchmark.py
 route-train: ; uv run python eval/build_router_labels.py && uv run python router_model/train.py
-deploy:    ; cd infra && uv run cdk deploy --all --require-approval never
+synth:     ; uv run --group infra python infra/app.py   # template only, no AWS calls
+deploy:    ; cd infra && npx aws-cdk deploy --all --require-approval never   # needs Arnav's go + spend check
 dash:      ; cd dashboard && npm run dev
 demo:      ; @echo "TODO Phase 7: warm-up + up + llm + engine + dash"
 test:      ; uv run pytest -q

@@ -24,3 +24,4 @@ Updated every time a file is added. Written/updated by `/sensei` after each phas
 - [phase-04-router-machinery.md](phase-04-router-machinery.md): arm registry + trace schema v3, query features, router labels, cascade, semantic cache, LinUCB bandit + offline replay, calibrated logistic classifier; all built on synthetic data, thresholds unfitted
 - [phase-03-router-probe-set.md](phase-03-router-probe-set.md): hypothesis-first probe set (categories, expected arm, abstention scoring), `draw/run/report`, why probe rows stay out of the headline tables
 - [phase-07-reliability-scripts.md](phase-07-reliability-scripts.md): replay recorder, `decide_mode` live/replay fallback, failure drill, warm-up, demo script and README skeleton
+- [phase-05-aws-layer.md](phase-05-aws-layer.md): HTTP API + two Lambdas + DynamoDB trace table (TTL) + S3/CloudFront + $5 budget as CDK code, `DynamoSink`, engine-minted vs Lambda-minted trace id; synth only, nothing deployed

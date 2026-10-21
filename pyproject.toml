@@ -10,6 +10,10 @@ dependencies = [
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.4", "umap-learn>=0.5", "mlx-lm>=0.14"]
+infra = [
+    "aws-cdk-lib>=2.274.0",
+    "constructs>=10.8.1",
+]
 
 [tool.ruff]
 line-length = 100
