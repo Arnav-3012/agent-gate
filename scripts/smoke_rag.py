@@ -1,10 +1,13 @@
 """Exit check for Phase 1: question -> top-k chunks -> local LLM answer, plus recall@k on the set."""
 import json
 import sys
+import uuid
 from pathlib import Path
 
-from engine.llm.client import LLMClient, Message
+from engine.llm.client import LLMClient
 from engine.rag.retriever import Retriever
+from engine.rag.single_pass import run_rag
+from engine.tracing.emitter import Emitter, JsonlSink
 
 
 def recall_at_k(r: Retriever, rows: list[dict], k: int) -> dict[str, float]:
@@ -24,12 +27,9 @@ def main() -> None:
     hits = r.search(q)
     for h in hits:
         print(f"{h.score:.3f}  [{h.chunk.title}] {h.chunk.text[:80]}")
-    ctx = "\n\n".join(f"[{h.chunk.title}] {h.chunk.text}" for h in hits)
-    call = LLMClient().chat([
-        Message(role="system", content="Answer briefly using only the context."),
-        Message(role="user", content=f"Context:\n{ctx}\n\nQuestion: {q}"),
-    ])
-    print(f"\nQ: {q}\nA: {call.text}\n({call.prompt_tokens}/{call.completion_tokens} tok, {call.latency_s:.2f}s)")
+    em = Emitter(uuid.uuid4().hex, [JsonlSink(Path("traces/smoke_rag.jsonl"))])
+    ans = run_rag(q, r, LLMClient(), em)
+    print(f"\nQ: {q}\nA: {ans}\n{[e.type for e in em.events]}  stop={em.events[-1].model_dump()}")
     print("recall@5 by type:", {t: round(v, 2) for t, v in recall_at_k(r, rows, 5).items()})
 
 
