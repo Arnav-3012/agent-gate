@@ -96,5 +96,12 @@ class LLMClient:
         self.meter.add(call)
         return call
 
+    def ping(self) -> bool:
+        """True if the server answers /models; for health checks."""
+        try:
+            return self._http.get("/models", timeout=3).is_success
+        except httpx.HTTPError:
+            return False
+
     def close(self) -> None:
         self._http.close()
