@@ -21,3 +21,4 @@ qdrant_storage/
 .cloudflared/
 traces/
 infra/cdk.out/
+*.tsbuildinfo

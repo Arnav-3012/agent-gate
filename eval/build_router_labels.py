@@ -5,6 +5,8 @@ import argparse
 import json
 from pathlib import Path
 
+import yaml
+
 from eval.benchmark import Row, load_files, score
 
 
@@ -25,7 +27,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("files", nargs="*", type=Path)
     ap.add_argument("--domain", default="general")
-    ap.add_argument("--eps", type=float, default=0.05)
+    ap.add_argument("--eps", type=float, default=yaml.safe_load(Path("config/router.yaml").read_text())["epsilon_f1"])
     ap.add_argument("--out", type=Path, default=Path("eval/router_labels.json"))
     a = ap.parse_args()
     arms = load_files(a.files or sorted(Path("eval/runs").glob("*.json")))[a.domain]

@@ -38,6 +38,11 @@ eval-all: preflight
 	$(MAKE) pareto-finance | tee eval/runs/pareto_finance.txt
 	$(MAKE) pareto-finance-all | tee eval/runs/pareto_finance_all.txt
 judge-finance: ; for f in eval/runs/smoke_eval_finance.json eval/runs/smoke_eval_finance_14b.json; do PYTHONPATH=. uv run python eval/judge.py $$f --model $(MODEL14) --base-url http://localhost:8081/v1; done
+# After `make judge-finance`: headline finance table with judge scores (numeric questions excluded, D38).
+pareto-finance-judged: ; PYTHONPATH=. uv run python eval/pareto.py eval/runs/smoke_eval_finance.judged.json eval/runs/smoke_eval_finance_14b.judged.json --exclude metrics-generated | tee eval/runs/pareto_finance_judged.txt
+# Judge validation: export 30 stratified rows, hand-fill the human_label column, then score agreement/kappa.
+judge-sample: ; PYTHONPATH=. uv run python eval/judge_validate.py export eval/runs/smoke_eval_finance.judged.json
+judge-score: ; PYTHONPATH=. uv run python eval/judge_validate.py score eval/runs/judge_sample.csv
 pareto:    ; PYTHONPATH=. uv run python eval/pareto.py eval/runs/smoke_eval.json eval/runs/smoke_eval_14b.json
 engine:    ; uv run uvicorn engine.api.main:app --port 8000 --reload
 ingest:    ; PYTHONPATH=. uv run python scripts/ingest.py
@@ -45,6 +50,7 @@ smoke-rag: ; PYTHONPATH=. uv run python scripts/smoke_rag.py
 smoke-agent: ; PYTHONPATH=. uv run python scripts/smoke_agent.py
 eval:      ; uv run python eval/run_baselines.py && uv run python eval/benchmark.py
 route-train: ; uv run python eval/build_router_labels.py && uv run python router_model/train.py
+umap:      ; PYTHONPATH=. uv run python scripts/umap_export.py   # Qdrant up; writes dashboard/public/data/galaxy.json
 synth:     ; uv run --group infra python infra/app.py   # template only, no AWS calls
 deploy:    ; cd infra && npx aws-cdk deploy --all --require-approval never   # needs Arnav's go + spend check
 dash:      ; cd dashboard && npm run dev
