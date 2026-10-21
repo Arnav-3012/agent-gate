@@ -4,7 +4,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from engine.tracing.schema import TraceEvent, event_adapter
+from engine.cost.ledger import Ledger
+from engine.tracing.schema import Stop, TraceEvent, event_adapter
 
 Sink = Callable[[TraceEvent], None]
 
@@ -26,15 +27,23 @@ def read_jsonl(path: Path) -> list[TraceEvent]:
 
 
 class Emitter:
-    """One per query. emit(Cls, **fields) stamps trace_id/seq/ts, validates, then calls every sink."""
+    """One per query. emit(Cls, **fields) stamps trace_id/seq/ts (and cost, if a ledger is set),
+    validates, then calls every sink."""
 
-    def __init__(self, trace_id: str, sinks: list[Sink]) -> None:
+    def __init__(self, trace_id: str, sinks: list[Sink], ledger: Ledger | None = None) -> None:
         self.trace_id = trace_id
         self.sinks = sinks
+        self.ledger = ledger
         self.events: list[TraceEvent] = []
 
     def emit(self, cls: type[Any], **fields: Any) -> TraceEvent:
         event = cls(trace_id=self.trace_id, seq=len(self.events), ts=time.time(), **fields)
+        if self.ledger:
+            llm = getattr(event, "llm", None)
+            if llm is not None:
+                llm.cost_usd = self.ledger.price(llm)
+            if isinstance(event, Stop):
+                event.total_cost_usd = self.ledger.total_usd
         self.events.append(event)
         for sink in self.sinks:
             sink(event)

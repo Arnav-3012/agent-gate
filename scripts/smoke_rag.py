@@ -4,6 +4,7 @@ import sys
 import uuid
 from pathlib import Path
 
+from engine.cost.ledger import Ledger, Pricing
 from engine.llm.client import LLMClient
 from engine.rag.retriever import Retriever
 from engine.rag.single_pass import run_rag
@@ -27,7 +28,7 @@ def main() -> None:
     hits = r.search(q)
     for h in hits:
         print(f"{h.score:.3f}  [{h.chunk.title}] {h.chunk.text[:80]}")
-    em = Emitter(uuid.uuid4().hex, [JsonlSink(Path("traces/smoke_rag.jsonl"))])
+    em = Emitter(uuid.uuid4().hex, [JsonlSink(Path("traces/smoke_rag.jsonl"))], Ledger(Pricing.from_yaml()))
     ans = run_rag(q, r, LLMClient(), em)
     print(f"\nQ: {q}\nA: {ans}\n{[e.type for e in em.events]}  stop={em.events[-1].model_dump()}")
     print("recall@5 by type:", {t: round(v, 2) for t, v in recall_at_k(r, rows, 5).items()})

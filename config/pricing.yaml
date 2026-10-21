@@ -1,7 +1,9 @@
-# Reference small-model API price. UNVERIFIED PLACEHOLDER: verify against the provider's
-# current pricing page before publishing any number (see docs/decision.md D4).
-reference_model: TODO-verify
-verified_on: null
-usd_per_1m_tokens: {input: 0.0, output: 0.0}
-retrieval_usd_per_query: 0.0
-infra_usd_per_query: 0.0
+# Reference small-model API price used to MODEL cost (local inference is $0). D4/D20.
+# Source: https://platform.claude.com/docs/en/about-claude/pricing (prompts <= 100k tokens tier).
+# Prompt cache and batch discounts are deliberately not modelled: all prompt tokens at the base
+# input rate (conservative, and cache hits on the local server are noise, not a cost signal).
+reference_model: claude-haiku-5-5
+verified_on: 2026-10-21
+usd_per_1m_tokens: {input: 0.10, output: 0.50}
+retrieval_usd_per_query: 0.0   # local Qdrant; no verified cloud price, so 0 (revisit if hosted)
+infra_usd_per_query: 0.0       # AWS free tier; revisit with Phase 5 numbers

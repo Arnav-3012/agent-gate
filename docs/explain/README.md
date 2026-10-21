@@ -13,3 +13,4 @@ Updated every time a file is added. Written/updated by `/sensei` after each phas
 - [phase-02-trace-schema.md](phase-02-trace-schema.md): frozen 7-event trace contract, `seq` + terminal `stop`, Emitter/JSONL sink, TS mirror and its parity test
 - [phase-02-single-pass-rag.md](phase-02-single-pass-rag.md): `run_rag` (retrieve step 0 -> answer -> stop), shortest-answer prompt, error-to-stop, mocked tests, smoke 637 tok / 2.1 s
 - [phase-02-agent-loop.md](phase-02-agent-loop.md): `run_agent` (plan -> retrieve/reflect -> answer), code-owned stop rules and caps, JSON retry, smoke: same answer as RAG at 2.8x tokens / ~7x latency
+- [phase-02-cost-ledger.md](phase-02-cost-ledger.md): why cost is modelled not measured, `Pricing`/`Ledger`, Emitter stamping, smoke: RAG $0.0000661 vs agent $0.0001977 (3.0x)
