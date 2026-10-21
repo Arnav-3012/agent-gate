@@ -1,0 +1,3 @@
+version: heuristic-v0
+epsilon_f1: 0.02
+threshold: 0.5

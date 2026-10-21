@@ -1,0 +1,7 @@
+# Reference small-model API price. UNVERIFIED PLACEHOLDER: verify against the provider's
+# current pricing page before publishing any number (see docs/decision.md D4).
+reference_model: TODO-verify
+verified_on: null
+usd_per_1m_tokens: {input: 0.0, output: 0.0}
+retrieval_usd_per_query: 0.0
+infra_usd_per_query: 0.0
