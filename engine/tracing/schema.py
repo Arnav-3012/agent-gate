@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 Mode = Literal["rag", "agent"]
 StopReason = Literal[
@@ -61,6 +61,7 @@ class Reflect(_Base):
     step: int
     confidence: float
     new_evidence: int  # chunks not seen in earlier steps
+    next_query: str = ""  # what the reflector wants searched next ("" = nothing); v2
     verdict: Literal["continue", "stop"]
     llm: LLMStats
 

@@ -1,5 +1,5 @@
 // Frozen trace contract. Mirror of engine/tracing/schema.py. Change both + SCHEMA_VERSION together.
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export type Mode = "rag" | "agent";
 export type StopReason =
@@ -58,6 +58,7 @@ export interface Reflect extends Base {
   step: number;
   confidence: number;
   new_evidence: number;
+  next_query: string; // "" = nothing; v2
   verdict: "continue" | "stop";
   llm: LLMStats;
 }
