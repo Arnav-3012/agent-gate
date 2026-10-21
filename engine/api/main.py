@@ -10,6 +10,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from engine.agent.loop import AgentConfig, run_agent
+from engine.api.health import Health
 from engine.cost.ledger import Ledger, Pricing
 from engine.llm.client import LLMClient
 from engine.rag.retriever import COLLECTION, Retriever
@@ -133,7 +134,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         ]
 
     @app.get("/health")
-    def health(request: Request) -> dict[str, bool]:
+    def health(request: Request) -> Health:
         e = eng(request)
         llm = e.make_llm()
         try:
@@ -144,7 +145,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             qdrant_ok = e.retriever.client.collection_exists(COLLECTION)
         except Exception:  # noqa: BLE001 - any connection failure means "down"
             qdrant_ok = False
-        return {"ok": llm_ok and qdrant_ok, "llm": llm_ok, "qdrant": qdrant_ok}
+        return Health(ok=llm_ok and qdrant_ok, llm=llm_ok, qdrant=qdrant_ok)
 
     return app
 

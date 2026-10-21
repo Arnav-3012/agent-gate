@@ -12,13 +12,15 @@ import numpy as np
 N_BOOT = 2000
 
 
-def load_arms(paths: list[Path]) -> dict[str, dict[str, tuple[float, ...]]]:
+def load_arms(paths: list[Path], exclude_types: frozenset[str] = frozenset()) -> dict[str, dict[str, tuple[float, ...]]]:
     """{arm: {question_id: (f1, cost, latency_s)}}; arm name = model tail + mode."""
     arms: dict[str, dict[str, tuple[float, ...]]] = {}
     for p in paths:
         d = json.loads(p.read_text())
         model = (d.get("model") or "default").split("/")[-1]
         for r in d["results"]:
+            if r["type"] in exclude_types:
+                continue
             arms.setdefault(f"{model}/{r['mode']}", {})[r["id"]] = (r.get("score", r["f1"]), r["cost"], r["latency"])
     return arms
 
@@ -37,20 +39,37 @@ def oracle(arms: dict[str, dict[str, tuple[float, ...]]], ids: list[str], eps: f
     return np.array([p[0] for p in picks]), np.array([p[1] for p in picks])
 
 
-def main(paths: list[Path]) -> None:
-    arms = load_arms(paths)
+def latency_stats(lat: np.ndarray, slo_s: float | None = None) -> dict[str, float]:
+    """Tail latency, not just the mean: p50/p95 and the share of queries within the SLO."""
+    out = {"p50": float(np.percentile(lat, 50)), "p95": float(np.percentile(lat, 95))}
+    if slo_s is not None:
+        out["within_slo"] = float((lat <= slo_s).mean())
+    return out
+
+
+def main(paths: list[Path], slo_s: float = 10.0, exclude_types: frozenset[str] = frozenset()) -> None:
+    arms = load_arms(paths, exclude_types)
     ids = sorted(set.intersection(*(set(a) for a in arms.values())))
     rng = np.random.default_rng(0)
-    print(f"{len(ids)} questions, {N_BOOT} bootstrap resamples\n")
-    print(f"{'arm':<32} {'F1':>6} {'95% CI':>15} {'$/1k q':>9} {'lat s':>6}   (cost modelled, D27/D29)")
+    note = f", excluded types: {', '.join(sorted(exclude_types))}" if exclude_types else ""
+    print(f"{len(ids)} questions, {N_BOOT} bootstrap resamples{note}\n")
+    print(f"{'arm':<32} {'F1':>6} {'95% CI':>15} {'$/1k q':>9} {'lat s':>6} {'p50':>6} {'p95':>6} {'<=' + format(slo_s, 'g') + 's':>6}   (cost modelled, D27/D29)")
     rows = {n: (*(np.array([a[i][k] for i in ids]) for k in range(3)),) for n, a in arms.items()}
     f_o, c_o = oracle(arms, ids)
     rows["oracle-router"] = (f_o, c_o, None)  # latency of the picked arm is not tracked
     for name, (f, c, lat) in rows.items():
         m, lo, hi = boot_ci(f, rng)
         print(f"{name:<32} {m:>6.3f} [{lo:.3f},{hi:.3f}] {c.mean() * 1000:>9.4f} "
-              f"{'' if lat is None else format(lat.mean(), '6.1f'):>6}")
+              f"{'' if lat is None else format(lat.mean(), '6.1f'):>6}", end="")
+        if lat is None:
+            print()
+        else:
+            t = latency_stats(lat, slo_s)
+            print(f" {t['p50']:>6.1f} {t['p95']:>6.1f} {t['within_slo']:>6.0%}")
 
 
 if __name__ == "__main__":
-    main([Path(p) for p in sys.argv[1:] if Path(p).exists()])
+    args = sys.argv[1:]
+    excluded = frozenset(args[i + 1] for i, a in enumerate(args) if a == "--exclude")
+    files = [a for i, a in enumerate(args) if a != "--exclude" and (i == 0 or args[i - 1] != "--exclude")]
+    main([Path(f) for f in files if Path(f).exists()], exclude_types=excluded)

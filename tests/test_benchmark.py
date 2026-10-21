@@ -47,3 +47,13 @@ def test_judged_file_supersedes_raw_and_domains_split(tmp_path: Path) -> None:
     write(tmp_path / "x_finance.judged.json", "m", [{**row("a", 0.0, 1.0, 1.0), "score": 1.0}])
     res = benchmark(load_files([raw, tmp_path / "x_finance.judged.json"]))
     assert list(res) == ["finance"] and res["finance"]["arms"]["m/rag"]["f1"] == 1.0
+
+
+def test_headline_split_drops_numeric_but_keeps_all() -> None:
+    from eval.benchmark import with_headline_split
+
+    rows = {"a": {"type": "novel-generated"}, "b": {"type": "metrics-generated"}}
+    out = with_headline_split({"finance": {"m/rag": rows}, "general": {"m/rag": rows}})
+    assert list(out["finance"]["m/rag"]) == ["a"]
+    assert list(out["finance_all"]["m/rag"]) == ["a", "b"]
+    assert list(out["general"]["m/rag"]) == ["a", "b"]  # only finance is filtered

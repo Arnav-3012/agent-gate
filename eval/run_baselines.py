@@ -81,6 +81,10 @@ def main() -> None:
     ap.add_argument("--base-url", default=None, help="LLM server (default: LLM_BASE_URL env)")
     ap.add_argument("--tag", default="", help="suffix for the output file, e.g. 14b")
     ap.add_argument("--resume", action="store_true", help="skip (question, mode) pairs already in the file")
+    ap.add_argument("--exclude-types", default=None,
+                    help="comma list of question types to skip AFTER sampling (keeps other types' questions "
+                         "identical to earlier runs). Default: metrics-generated for --domain finance (D39, "
+                         "numeric questions are not run in Phase 3); pass '' to include them")
     a = ap.parse_args()
     modes = a.modes.split(",")
     if bad := set(modes) - set(MODES):
@@ -89,7 +93,9 @@ def main() -> None:
     fin = a.domain == "finance"
     rows = [json.loads(l) for l in Path(
         f"eval/data/{'finance_questions' if fin else 'questions'}.jsonl").read_text().splitlines()]
-    qs = sample(rows, a.per_type, a.seed, stable=True)
+    exclude = a.exclude_types if a.exclude_types is not None else ("metrics-generated" if a.domain == "finance" else "")
+    skip = set(filter(None, exclude.split(",")))
+    qs = [q for q in sample(rows, a.per_type, a.seed, stable=True) if q["type"] not in skip]
     cfg = AgentConfig.from_yaml()
     answer_kw: dict = {}
     if fin:  # sentence-length gold answers: lift the short-answer prompt and token cap on every arm

@@ -1,8 +1,9 @@
-.PHONY: up down llm llm14 judge-finance preflight eval-all clean-finance smoke-eval-finance-14b pareto-finance oracle-finance oracle-finance-14b ingest-finance smoke-eval-finance smoke smoke-rag smoke-agent smoke-eval smoke-eval-14b pareto engine ingest eval route-train deploy dash demo test
+.PHONY: up down llm llm14 pareto-finance-all judge-finance preflight eval-all clean-finance smoke-eval-finance-14b pareto-finance oracle-finance oracle-finance-14b ingest-finance smoke-eval-finance smoke smoke-rag smoke-agent smoke-eval smoke-eval-14b pareto engine ingest eval route-train deploy dash demo test
 MODEL ?= mlx-community/Qwen2.5-7B-Instruct-4bit
 MODEL14 ?= mlx-community/Qwen2.5-14B-Instruct-4bit
 MODES ?= rag,agent   # arms to run; run one at a time overnight, e.g. MODES=agent
 RESUME ?=            # RESUME=--resume continues an interrupted run (same PER/MODES/prompt only)
+EXCLUDE ?=           # EXCLUDE=metrics-generated skips numeric finance questions (D39)
 PER ?= 10   # questions per type for eval targets; PER=5 for a quick run
 
 up:        ; docker compose up -d qdrant
@@ -13,9 +14,11 @@ smoke:     ; PYTHONPATH=. uv run python scripts/smoke_llm.py
 smoke-eval: ; PYTHONPATH=. uv run python scripts/smoke_eval.py --per-type $(PER)
 smoke-eval-14b: ; PYTHONPATH=. uv run python scripts/smoke_eval.py --per-type $(PER) --model $(MODEL14) --base-url http://localhost:8081/v1 --tag 14b
 ingest-finance: ; PYTHONPATH=. uv run python scripts/ingest_finance.py
-smoke-eval-finance: ; PYTHONPATH=. uv run python scripts/smoke_eval.py --domain finance --per-type $(PER) --modes $(MODES) $(RESUME)
-smoke-eval-finance-14b: ; PYTHONPATH=. uv run python scripts/smoke_eval.py --domain finance --per-type $(PER) --modes $(MODES) $(RESUME) --model $(MODEL14) --base-url http://localhost:8081/v1 --tag 14b
-pareto-finance: ; PYTHONPATH=. uv run python eval/pareto.py eval/runs/smoke_eval_finance.json eval/runs/smoke_eval_finance_14b.json
+smoke-eval-finance: ; PYTHONPATH=. uv run python scripts/smoke_eval.py --domain finance --per-type $(PER) --modes $(MODES) $(RESUME) $(if $(EXCLUDE),--exclude-types $(EXCLUDE))
+smoke-eval-finance-14b: ; PYTHONPATH=. uv run python scripts/smoke_eval.py --domain finance --per-type $(PER) --modes $(MODES) $(RESUME) $(if $(EXCLUDE),--exclude-types $(EXCLUDE)) --model $(MODEL14) --base-url http://localhost:8081/v1 --tag 14b
+# Headline finance table excludes numeric questions (D38); the appendix table keeps everything.
+pareto-finance: ; PYTHONPATH=. uv run python eval/pareto.py eval/runs/smoke_eval_finance.json eval/runs/smoke_eval_finance_14b.json --exclude metrics-generated
+pareto-finance-all: ; PYTHONPATH=. uv run python eval/pareto.py eval/runs/smoke_eval_finance.json eval/runs/smoke_eval_finance_14b.json
 oracle-finance: ; PYTHONPATH=. uv run python scripts/smoke_eval.py --domain finance --per-type $(PER) --modes oracle,rag --tag oracle
 oracle-finance-14b: ; PYTHONPATH=. uv run python scripts/smoke_eval.py --domain finance --per-type $(PER) --modes oracle,rag --model $(MODEL14) --base-url http://localhost:8081/v1 --tag oracle14b
 preflight:
@@ -33,6 +36,7 @@ eval-all: preflight
 	$(MAKE) smoke-eval-14b PER=10
 	$(MAKE) pareto | tee eval/runs/pareto_general.txt
 	$(MAKE) pareto-finance | tee eval/runs/pareto_finance.txt
+	$(MAKE) pareto-finance-all | tee eval/runs/pareto_finance_all.txt
 judge-finance: ; for f in eval/runs/smoke_eval_finance.json eval/runs/smoke_eval_finance_14b.json; do PYTHONPATH=. uv run python eval/judge.py $$f --model $(MODEL14) --base-url http://localhost:8081/v1; done
 pareto:    ; PYTHONPATH=. uv run python eval/pareto.py eval/runs/smoke_eval.json eval/runs/smoke_eval_14b.json
 engine:    ; uv run uvicorn engine.api.main:app --port 8000 --reload

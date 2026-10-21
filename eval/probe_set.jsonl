@@ -1,0 +1,12 @@
+{"id": "nic-1", "domain": "general", "category": "not-in-corpus", "answer_type": "abstain", "expected_arm": "qwen7b-rag", "question": "Who won the 2031 FIFA World Cup?", "answer": "unanswerable"}
+{"id": "nic-2", "domain": "general", "category": "not-in-corpus", "answer_type": "abstain", "expected_arm": "qwen7b-rag", "question": "What is the internal employee ID of the receptionist at the Louvre?", "answer": "unanswerable"}
+{"id": "nic-3", "domain": "general", "category": "not-in-corpus", "answer_type": "abstain", "expected_arm": "qwen7b-rag", "question": "What did the mayor of Pune eat for breakfast on 3 March 2019?", "answer": "unanswerable"}
+{"id": "nic-4", "domain": "general", "category": "not-in-corpus", "answer_type": "abstain", "expected_arm": "qwen7b-rag", "question": "What is the middle name of the second-oldest cat in Reykjavik?", "answer": "unanswerable"}
+{"id": "nic-5", "domain": "general", "category": "not-in-corpus", "answer_type": "abstain", "expected_arm": "qwen7b-rag", "question": "Which stock will double in value next quarter?", "answer": "unanswerable"}
+{"id": "nic-f1", "domain": "finance", "category": "not-in-corpus", "answer_type": "abstain", "expected_arm": "qwen7b-rag", "question": "What was Acme Quantum Holdings' FY2021 revenue in USD millions?", "answer": "unanswerable"}
+{"id": "nic-f2", "domain": "finance", "category": "not-in-corpus", "answer_type": "abstain", "expected_arm": "qwen7b-rag", "question": "What dividend per share will Costco declare in FY2031?", "answer": "unanswerable"}
+{"id": "amb-1", "domain": "general", "category": "ambiguous", "answer_type": "abstain", "expected_arm": "qwen7b-rag", "question": "Who directed it?", "answer": "needs clarification"}
+{"id": "amb-2", "domain": "general", "category": "ambiguous", "answer_type": "abstain", "expected_arm": "qwen7b-rag", "question": "When was he born?", "answer": "needs clarification"}
+{"id": "amb-3", "domain": "general", "category": "ambiguous", "answer_type": "abstain", "expected_arm": "qwen7b-rag", "question": "Which one is bigger?", "answer": "needs clarification"}
+{"id": "amb-4", "domain": "general", "category": "ambiguous", "answer_type": "abstain", "expected_arm": "qwen7b-rag", "question": "What is the population?", "answer": "needs clarification"}
+{"id": "amb-f1", "domain": "finance", "category": "ambiguous", "answer_type": "abstain", "expected_arm": "qwen7b-rag", "question": "What was the margin last year?", "answer": "needs clarification"}

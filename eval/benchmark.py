@@ -33,6 +33,21 @@ def load_files(paths: list[Path]) -> dict[str, dict[str, dict[str, Row]]]:
     return out
 
 
+HEADLINE_EXCLUDE = {"finance": {"metrics-generated"}}  # D38: numeric questions leave the headline
+
+
+def with_headline_split(files: dict[str, dict[str, dict[str, Row]]]) -> dict[str, dict[str, dict[str, Row]]]:
+    """Domain "finance" becomes the headline (excluded types removed); the full set is kept as
+    "finance_all" so the numeric limitation is still reported, just not in the headline."""
+    out = dict(files)
+    for domain, drop in HEADLINE_EXCLUDE.items():
+        if domain in files:
+            out[f"{domain}_all"] = files[domain]
+            out[domain] = {arm: {i: r for i, r in rows.items() if r.get("type") not in drop}
+                           for arm, rows in files[domain].items()}
+    return out
+
+
 def score(r: Row) -> float:
     return r.get("score", r["f1"])
 
@@ -89,7 +104,7 @@ def benchmark(files: dict[str, dict[str, dict[str, Row]]], seed: int = 0) -> dic
 
 
 def main(paths: list[Path]) -> None:
-    res = benchmark(load_files(paths))
+    res = benchmark(with_headline_split(load_files(paths)))
     out = Path("eval/results.json")
     out.write_text(json.dumps(res, indent=1))
     for domain, e in res.items():

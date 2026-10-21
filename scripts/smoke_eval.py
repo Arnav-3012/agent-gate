@@ -91,6 +91,9 @@ def main() -> None:
     ap.add_argument("--tag", default="", help="suffix for the output file, e.g. 14b")
     ap.add_argument("--domain", choices=["general", "finance"], default="general",
                     help="finance: finance_questions.jsonl + 'finance' collection + numeric-tolerant F1")
+    ap.add_argument("--exclude-types", default="",
+                    help="comma list of question types to skip AFTER sampling (so the other types keep the "
+                         "exact questions of earlier runs), e.g. metrics-generated")
     ap.add_argument("--resume", action="store_true",
                     help="continue from the existing output file: skip (question, mode) pairs already done")
     ap.add_argument("--modes", default="rag,agent",
@@ -105,7 +108,8 @@ def main() -> None:
     rows = [json.loads(l) for l in
             Path("eval/data/finance_questions.jsonl" if fin else "eval/data/questions.jsonl")
             .read_text().splitlines()]
-    qs = sample(rows, a.per_type, a.seed, stable=fin)
+    skip = set(filter(None, a.exclude_types.split(",")))
+    qs = [q for q in sample(rows, a.per_type, a.seed, stable=fin) if q["type"] not in skip]
     score = finance_f1 if fin else f1
     retriever = Retriever(collection="finance") if fin else Retriever()
     pricing, cfg = Pricing.from_yaml(), AgentConfig.from_yaml()

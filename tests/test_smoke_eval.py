@@ -61,3 +61,13 @@ def test_windows_cover_text_and_break_on_spaces() -> None:
     assert spans[0][0] == 0 and spans[-1][1] == len(text)
     assert all(text[a:b].split()[-1] in ("Revenue", "1,577") for a, b in spans)  # no cut numbers
     assert all(b - a <= 900 for a, b in spans) and all(s2[0] < s1[1] for s1, s2 in itertools.pairwise(spans))
+
+
+def test_excluding_a_type_after_sampling_keeps_other_types_identical() -> None:
+    rows = [{"id": f"{t}{i}", "type": t} for t in ("a", "m", "n") for i in range(30)]
+    full = sample(rows, 10, 0, stable=True)
+    kept = [q for q in full if q["type"] != "m"]
+    assert [q["id"] for q in kept if q["type"] == "n"] == [q["id"] for q in full if q["type"] == "n"]
+    # removing the type BEFORE sampling would shift the seeded stream and change type "n"
+    assert [q["id"] for q in sample([r for r in rows if r["type"] != "m"], 10, 0, stable=True)
+            if q["type"] == "n"] != [q["id"] for q in full if q["type"] == "n"]
