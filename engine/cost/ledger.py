@@ -26,11 +26,11 @@ class Pricing(BaseModel):
 class Ledger:
     """One per query: prices each LLM call and accumulates the query total."""
 
-    def __init__(self, pricing: Pricing, model: str = "") -> None:
+    def __init__(self, pricing: Pricing, model: str = "", multiplier: float | None = None) -> None:
         self.pricing = pricing
         self.llm_usd = 0.0
-        self.multiplier = next((m for k, m in pricing.model_multiplier.items()
-                                if k.lower() in model.lower()), 1.0)
+        self.multiplier = multiplier if multiplier is not None else next(
+            (m for k, m in pricing.model_multiplier.items() if k.lower() in model.lower()), 1.0)
 
     def price(self, stats: LLMStats) -> float:
         p = self.pricing.usd_per_1m_tokens

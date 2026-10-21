@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 Mode = Literal["rag", "agent"]
 StopReason = Literal[
@@ -35,7 +35,7 @@ class _Base(BaseModel):
 
 class RouteDecided(_Base):
     type: Literal["route_decided"] = "route_decided"
-    route: Mode
+    route: str  # arm id from config/arms.yaml (v2 traces carry "rag"/"agent", still valid)
     p_agent: float | None = None  # classifier probability that agentic is needed
     features: dict[str, float] = {}
     reason: str = ""
@@ -68,8 +68,8 @@ class Reflect(_Base):
 
 class Escalate(_Base):
     type: Literal["escalate"] = "escalate"
-    from_mode: Mode
-    to_mode: Mode
+    from_mode: str  # arm ids since v3; the field names stay so v2 traces validate
+    to_mode: str
     reason: str
 
 

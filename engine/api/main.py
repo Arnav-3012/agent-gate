@@ -14,8 +14,9 @@ from engine.cost.ledger import Ledger, Pricing
 from engine.llm.client import LLMClient
 from engine.rag.retriever import COLLECTION, Retriever
 from engine.rag.single_pass import run_rag
+from engine.router.arms import Arm, ArmRegistry, run_arm
 from engine.tracing.emitter import Emitter, JsonlSink
-from engine.tracing.schema import TraceEvent, event_adapter
+from engine.tracing.schema import RouteDecided, TraceEvent, event_adapter
 
 TRACE_ID = re.compile(r"^[0-9a-f]{32}$")  # also keeps ids from escaping trace_dir
 
@@ -23,6 +24,7 @@ TRACE_ID = re.compile(r"^[0-9a-f]{32}$")  # also keeps ids from escaping trace_d
 class RunRequest(BaseModel):
     question: str = Field(min_length=1)
     mode: Literal["rag", "agent"] = "rag"
+    arm: str | None = None  # arm name from config/arms.yaml; overrides `mode` and is traced as the route
 
 
 class RunAccepted(BaseModel):
@@ -45,22 +47,31 @@ class Engine:
         trace_dir: Path = Path("traces"),
         pricing: Pricing | None = None,
         agent_cfg: AgentConfig | None = None,
+        arms: ArmRegistry | None = None,
+        make_arm_llm: Callable[[Arm], LLMClient] = Arm.make_llm,
     ) -> None:
         self.retriever = retriever
         self.make_llm = make_llm
         self.trace_dir = trace_dir
         self.pricing = pricing or Pricing.from_yaml()
         self.agent_cfg = agent_cfg or AgentConfig.from_yaml()
+        self.arms = arms or ArmRegistry.from_yaml()
+        self.make_arm_llm = make_arm_llm
 
     def path(self, trace_id: str) -> Path:
         return self.trace_dir / f"{trace_id}.jsonl"
 
     def run(self, trace_id: str, req: RunRequest) -> None:
         """Runs one query to completion; run_rag/run_agent always end the trace with a stop."""
-        llm = self.make_llm()
-        emitter = Emitter(trace_id, [JsonlSink(self.path(trace_id))], Ledger(self.pricing, llm.model))
+        arm = self.arms.get(req.arm) if req.arm else None
+        llm = self.make_arm_llm(arm) if arm else self.make_llm()
+        ledger = Ledger(self.pricing, llm.model, arm.price_multiplier if arm else None)
+        emitter = Emitter(trace_id, [JsonlSink(self.path(trace_id))], ledger)
         try:
-            if req.mode == "rag":
+            if arm:
+                emitter.emit(RouteDecided, route=arm.name, reason="explicit arm")
+                run_arm(arm, req.question, self.retriever, llm, emitter, self.agent_cfg)
+            elif req.mode == "rag":
                 run_rag(req.question, self.retriever, llm, emitter)
             else:
                 run_agent(req.question, self.retriever, llm, emitter, self.agent_cfg)
@@ -88,6 +99,11 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     @app.post("/run", status_code=202)
     def run(req: RunRequest, request: Request, background: BackgroundTasks) -> RunAccepted:
         e = eng(request)
+        if req.arm:
+            try:
+                e.arms.get(req.arm)
+            except KeyError as err:
+                raise HTTPException(422, str(err.args[0])) from err
         trace_id = uuid.uuid4().hex
         e.trace_dir.mkdir(parents=True, exist_ok=True)
         e.path(trace_id).touch()  # so an immediate GET /trace/{id} is "pending", not 404

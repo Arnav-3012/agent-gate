@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from engine.agent.loop import AgentConfig
@@ -125,3 +126,29 @@ def test_health_reports_each_dependency(tmp_path: Path) -> None:
         assert c.get("/health").json() == {"ok": True, "llm": True, "qdrant": True}
     with make_client(tmp_path, lambda r: httpx.Response(503), up=False) as c:
         assert c.get("/health").json() == {"ok": False, "llm": False, "qdrant": False}
+
+
+def test_two_arms_run_through_their_own_clients_and_are_traced(tmp_path: Path) -> None:
+    from engine.router.arms import Arm, ArmRegistry
+
+    arms = ArmRegistry(arms=[
+        Arm(name="small-rag", model="small", base_url="http://s/v1", mode="rag"),
+        Arm(name="big-rag", model="big", base_url="http://b/v1", mode="rag", price_multiplier=4.0),
+    ])
+    seen: list[str] = []
+
+    def make(arm: Arm) -> LLMClient:
+        seen.append(arm.name)
+        return LLMClient(base_url=arm.base_url, model=arm.model, transport=httpx.MockTransport(llm_ok))
+
+    engine = Engine(FakeRetriever(), trace_dir=tmp_path, agent_cfg=AgentConfig(), arms=arms,
+                    make_arm_llm=make, pricing=Pricing(reference_model="m", verified_on="2026-10-21",
+                                                       usd_per_1m_tokens={"input": 0.10, "output": 0.50}))
+    with TestClient(create_app(engine)) as c:
+        bodies = [c.get(f"/trace/{c.post('/run', json={'question': 'q', 'arm': a}).json()['trace_id']}").json()
+                  for a in ("small-rag", "big-rag")]
+        assert c.post("/run", json={"question": "q", "arm": "nope"}).status_code == 422
+    assert seen == ["small-rag", "big-rag"]
+    assert [b["events"][0]["route"] for b in bodies] == ["small-rag", "big-rag"]
+    small, big = (b["events"][-1]["total_cost_usd"] for b in bodies)
+    assert big == pytest.approx(4 * small)

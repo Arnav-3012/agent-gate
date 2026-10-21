@@ -1,5 +1,5 @@
 // Frozen trace contract. Mirror of engine/tracing/schema.py. Change both + SCHEMA_VERSION together.
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export type Mode = "rag" | "agent";
 export type StopReason =
@@ -32,7 +32,7 @@ interface Base {
 
 export interface RouteDecided extends Base {
   type: "route_decided";
-  route: Mode;
+  route: string; // arm id from config/arms.yaml (v2: "rag" | "agent")
   p_agent: number | null;
   features: Record<string, number>;
   reason: string;
@@ -65,8 +65,8 @@ export interface Reflect extends Base {
 
 export interface Escalate extends Base {
   type: "escalate";
-  from_mode: Mode;
-  to_mode: Mode;
+  from_mode: string; // arm ids since v3
+  to_mode: string;
   reason: string;
 }
 

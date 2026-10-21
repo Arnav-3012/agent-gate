@@ -44,3 +44,15 @@ def test_ts_mirror_matches_python() -> None:
     py_types = set(re.findall(r'type: Literal\["(\w+)"\]', Path("engine/tracing/schema.py").read_text()))
     assert ts_types == py_types
     assert f"SCHEMA_VERSION = {SCHEMA_VERSION}" in ts
+
+
+def test_v2_route_and_escalate_still_validate() -> None:
+    base = {"trace_id": "t", "seq": 0, "ts": 0}
+
+    def parse(**fields):
+        return event_adapter.validate_python({**base, **fields})
+
+    r = parse(type="route_decided", route="rag")
+    e = parse(type="escalate", from_mode="rag", to_mode="agent", reason="x")
+    assert r.route == "rag" and e.to_mode == "agent"
+    assert parse(type="route_decided", route="qwen14b-agent").route == "qwen14b-agent"

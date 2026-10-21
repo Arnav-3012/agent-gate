@@ -1,0 +1,7 @@
+# Routable arms (D24). `route` in the trace is the arm name. Price per token comes from
+# config/pricing.yaml (model_multiplier by model id) unless an arm sets price_multiplier.
+arms:
+  - {name: qwen7b-rag,    model: mlx-community/Qwen2.5-7B-Instruct-4bit,  base_url: "http://localhost:8080/v1", mode: rag}
+  - {name: qwen7b-agent,  model: mlx-community/Qwen2.5-7B-Instruct-4bit,  base_url: "http://localhost:8080/v1", mode: agent}
+  - {name: qwen14b-rag,   model: mlx-community/Qwen2.5-14B-Instruct-4bit, base_url: "http://localhost:8081/v1", mode: rag}
+  - {name: qwen14b-agent, model: mlx-community/Qwen2.5-14B-Instruct-4bit, base_url: "http://localhost:8081/v1", mode: agent}
