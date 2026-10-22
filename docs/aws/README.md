@@ -11,7 +11,8 @@ Account `250674680827`, region `ap-south-1` (Mumbai), CDK stack name `AgentGate`
 | Stack `AgentGate` | **deployed without CloudFront** (`WITH_CDN` unset): HTTP API, Router + Trace Lambdas, DynamoDB `agentgate-traces`, $5 budget |
 | `ApiUrl` | `https://gnvxffloug.execute-api.ap-south-1.amazonaws.com` |
 | Smoke test | engine 401 without key; `POST /query` -> trace in DynamoDB -> `GET /trace` `done:true` (RAG, 1111 tokens, $0.000112) |
-| `GET /health` route | coded + tested, needs one more `cdk deploy` |
+| `GET /health` route | deployed, verified through AWS |
+| `domain` forwarding (finance) | deployed, verified (10-K filings retrieved) |
 | S3 + CloudFront | **blocked**: new account must be verified by AWS Support first ([s3-cloudfront.md](s3-cloudfront.md)) |
 | Hardening in place | shared secret `ENGINE_KEY`, API throttle 10 rps / burst 20 |
 | Story of how we got here | [deploy-log.md](deploy-log.md) (every error, cause, fix) |

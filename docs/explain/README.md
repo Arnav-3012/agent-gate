@@ -25,5 +25,7 @@ Updated every time a file is added. Written/updated by `/sensei` after each phas
 - [phase-03-retrieval-scope.md](phase-03-retrieval-scope.md): retrieval fix test (company+fiscal-year scope, recall@k, one config for all arms, T1 results 35% -> 73%)
 - [phase-03-router-probe-set.md](phase-03-router-probe-set.md): hypothesis-first probe set (categories, expected arm, abstention scoring), `draw/run/report`, why probe rows stay out of the headline tables
 - [phase-07-reliability-scripts.md](phase-07-reliability-scripts.md): replay recorder, `decide_mode` live/replay fallback, failure drill, warm-up, demo script and README skeleton
-- [phase-05-aws-layer.md](phase-05-aws-layer.md): HTTP API + two Lambdas + DynamoDB trace table (TTL) + S3/CloudFront + $5 budget as CDK code, `DynamoSink`, engine-minted vs Lambda-minted trace id; synth only, nothing deployed
+- [phase-05-aws-layer.md](phase-05-aws-layer.md): HTTP API + two Lambdas + DynamoDB trace table (TTL) + $5 budget, deployed 2026-10-22 (CloudFront pending account verification); `DynamoSink`, shared secret, /health route. Per-service detail: `../aws/`, story: `../aws/deploy-log.md`
 - [phase-06-dashboard-pages.md](phase-06-dashboard-pages.md): what each dashboard page and section shows (header pill, Command Center, Benchmark)
+
+- [../aws/README.md](../aws/README.md): per-service AWS docs (IAM/STS, Budgets, CDK/CloudFormation, Lambda, API Gateway, DynamoDB, S3/CloudFront, CloudWatch, tunnel)
