@@ -22,3 +22,4 @@ qdrant_storage/
 traces/
 infra/cdk.out/
 *.tsbuildinfo
+.env.local

@@ -1,4 +1,6 @@
 """HTTP face of the engine: POST /run starts a traced query, GET /trace/{id} polls its events."""
+import hmac
+import os
 import re
 import uuid
 from collections.abc import AsyncIterator, Callable
@@ -6,7 +8,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from engine.agent.loop import AgentConfig, run_agent
@@ -115,7 +117,14 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     def eng(request: Request) -> Engine:
         return request.app.state.engine
 
-    @app.post("/run", status_code=202)
+    def require_key(x_agentgate_key: str = Header(default="")) -> None:
+        """POST /run is reachable through the public tunnel: when ENGINE_KEY is set, the router
+        Lambda must present it. Unset (local dev, tests) means open."""
+        key = os.environ.get("ENGINE_KEY")
+        if key and not hmac.compare_digest(x_agentgate_key, key):
+            raise HTTPException(401, "bad or missing x-agentgate-key")
+
+    @app.post("/run", status_code=202, dependencies=[Depends(require_key)])
     def run(req: RunRequest, request: Request, background: BackgroundTasks) -> RunAccepted:
         e = eng(request)
         if req.arm:

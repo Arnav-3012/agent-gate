@@ -1,4 +1,4 @@
-.PHONY: phase3-7b phase3-14b paired fixtest-recall fixtest-t2 fixtest-t3 fixtest-report synth up down llm llm14 pareto-finance-all judge-finance preflight eval-all clean-finance smoke-eval-finance-14b pareto-finance oracle-finance oracle-finance-14b ingest-finance smoke-eval-finance smoke smoke-rag smoke-agent smoke-eval smoke-eval-14b pareto engine ingest eval route-train deploy dash demo test
+.PHONY: armset-b armset-b-judge phase3 phase3-report phase3-7b phase3-14b paired fixtest-recall fixtest-t2 fixtest-t3 fixtest-report synth up down llm llm14 pareto-finance-all judge-finance preflight eval-all clean-finance smoke-eval-finance-14b pareto-finance oracle-finance oracle-finance-14b ingest-finance smoke-eval-finance smoke smoke-rag smoke-agent smoke-eval smoke-eval-14b pareto engine ingest eval route-train deploy dash demo test
 MODEL ?= mlx-community/Qwen2.5-7B-Instruct-4bit
 MODEL14 ?= mlx-community/Qwen2.5-14B-Instruct-4bit
 MODES ?= rag,agent   # arms to run; run one at a time overnight, e.g. MODES=agent
@@ -23,11 +23,34 @@ phase3-7b:
 	$(P3) --domain finance --per-type 50 --modes rag
 	$(P3) --domain general --per-type 100 --modes agent
 	$(P3) --domain finance --per-type 50 --modes agent
+# Arm set B (D52): cross-tier hosted arms + closed-book 7B. Caps sum to $2.80 (expected ~$1.9); key: set -a; source .env; set +a
+HOSTED = $(P3) --provider anthropic --modes rag
+armset-b:
+	$(P3) --domain general --per-type 100 --modes closed --out eval/runs/baseline_general_closed.json
+	$(HOSTED) --model claude-haiku-5-5 --tag haiku --domain general --per-type 100 --max-usd 0.15
+	$(HOSTED) --model claude-haiku-5-5 --tag haiku --domain finance --per-type 50 --max-usd 0.15
+	$(HOSTED) --model claude-sonnet-5-5 --tag sonnet --domain general --per-type 100 --max-usd 1.10
+	$(HOSTED) --model claude-sonnet-5-5 --tag sonnet --domain finance --per-type 50 --max-usd 0.90
+armset-b-judge:
+	for f in general_closed general_haiku general_sonnet; do PYTHONPATH=. uv run python eval/judge.py eval/runs/baseline_$$f.json --domain general --judge hosted --max-usd 0.10; done
+	for f in finance_haiku finance_sonnet; do PYTHONPATH=. uv run python eval/judge.py eval/runs/baseline_$$f.json --judge hosted --max-usd 0.10; done
 phase3-14b:
 	$(P3) --model $(MODEL14) --base-url http://localhost:8081/v1 --tag 14b --domain general --per-type 100 --modes rag
 	$(P3) --model $(MODEL14) --base-url http://localhost:8081/v1 --tag 14b --domain finance --per-type 50 --modes rag
 	$(P3) --model $(MODEL14) --base-url http://localhost:8081/v1 --tag 14b --domain general --per-type 100 --modes agent
 	$(P3) --model $(MODEL14) --base-url http://localhost:8081/v1 --tag 14b --domain finance --per-type 50 --modes agent
+
+# One command for the whole Phase 3 main eval, in order: needs Qdrant + BOTH servers up (`make up`, `make llm`,
+# `make llm14` in two other terminals; same as eval-all). Re-run `make phase3` after any interruption: --resume skips
+# finished (question, arm) pairs. Analysis output lands in eval/runs/phase3_*.txt. The hosted judge is NOT in here (needs a key + go).
+S7 = default
+S14 = Qwen2.5-14B-Instruct-4bit
+phase3: preflight phase3-7b phase3-14b phase3-report
+phase3-report:
+	PYTHONPATH=. uv run python -m eval.paired eval/runs/baseline_*.json | tee eval/runs/phase3_paired.txt
+	PYTHONPATH=. uv run python -m eval.benchmark eval/runs/baseline_*.json | tee eval/runs/phase3_benchmark.txt
+	PYTHONPATH=. uv run python -m eval.cascade_cv eval/runs/baseline_*.json --domain general --cheap $(S7)/rag --strong $(S14)/rag | tee eval/runs/phase3_cascade_general.txt
+	PYTHONPATH=. uv run python -m eval.cascade_cv eval/runs/baseline_*.json --domain finance --cheap $(S7)/rag --strong $(S14)/rag | tee eval/runs/phase3_cascade_finance.txt
 
 up:        ; docker compose up -d qdrant
 down:      ; docker compose down
@@ -67,6 +90,8 @@ pareto-finance-judged: ; PYTHONPATH=. uv run python eval/pareto.py eval/runs/bas
 judge-sample: ; PYTHONPATH=. uv run python eval/judge_validate.py export eval/runs/baseline_finance.judged.json
 judge-score: ; PYTHONPATH=. uv run python eval/judge_validate.py score eval/runs/judge_sample.csv
 pareto:    ; PYTHONPATH=. uv run python eval/pareto.py eval/runs/smoke_eval.json eval/runs/smoke_eval_14b.json
+export BUDGET_EMAIL := $(shell sed -n 's/^BUDGET_EMAIL=\([^ ]*\).*/\1/p' .env 2>/dev/null)
+export ENGINE_KEY := $(shell sed -n 's/^ENGINE_KEY=\([^ ]*\).*/\1/p' .env 2>/dev/null)
 engine:    ; uv run uvicorn engine.api.main:app --port 8000 --reload
 ingest:    ; PYTHONPATH=. uv run python scripts/ingest.py
 smoke-rag: ; PYTHONPATH=. uv run python scripts/smoke_rag.py

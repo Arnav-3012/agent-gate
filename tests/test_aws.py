@@ -97,6 +97,19 @@ def test_router_rejections(body, post, status, monkeypatch) -> None:
     assert call_router(body, post, monkeypatch)["statusCode"] == status
 
 
+def test_health_route_proxies_engine(monkeypatch) -> None:
+    monkeypatch.setenv("ENGINE_URL", "http://engine:8000/")
+    ev = {"routeKey": "GET /health"}
+    ok = router.handler(ev, get=lambda u: (200, {"ok": True, "llm": True, "qdrant": True}) if u.endswith("/health") else (404, None))
+    assert ok["statusCode"] == 200 and json.loads(ok["body"])["llm"] is True
+    assert router.handler(ev, get=lambda u: (500, None))["statusCode"] == 502
+
+    def down(url: str) -> tuple[int, None]:
+        raise ConnectionRefusedError
+
+    assert router.handler(ev, get=down)["statusCode"] == 502
+
+
 def test_router_engine_unreachable(monkeypatch) -> None:
     def down(url: str, body: dict) -> int:
         raise ConnectionRefusedError
@@ -114,6 +127,33 @@ def test_make_sinks(tmp_path: Path) -> None:
         make_sinks(p, "s3")
 
 
+def test_run_requires_shared_key_when_set(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("ENGINE_KEY", "s3cret")
+    with make_client(tmp_path) as c:
+        assert c.post("/run", json={"question": "q"}).status_code == 401
+        assert c.post("/run", json={"question": "q"}, headers={"x-agentgate-key": "no"}).status_code == 401
+        assert c.post("/run", json={"question": "q"}, headers={"x-agentgate-key": "s3cret"}).status_code == 202
+        assert c.get("/health").status_code == 200  # only /run is guarded
+
+
+def test_router_sends_shared_key(monkeypatch) -> None:
+    seen: dict = {}
+
+    class R:
+        status = 202
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    def fake_open(req, timeout):
+        seen.update(req.headers)
+        return R()
+
+    monkeypatch.setenv("ENGINE_KEY", "s3cret")
+    monkeypatch.setattr(router.urllib.request, "urlopen", fake_open)
+    assert router.post_json("http://e/run", {"question": "q"}) == 202
+    assert seen["X-agentgate-key"] == "s3cret"
+
+
 def test_run_uses_router_minted_trace_id(tmp_path: Path) -> None:
     with make_client(tmp_path) as c:
         assert c.post("/run", json={"question": "q", "trace_id": TID}).json() == {"trace_id": TID}
@@ -128,12 +168,16 @@ def test_stack_synthesizes_expected_resources(tmp_path: Path, monkeypatch) -> No
     sys.path.insert(0, str(Path(__file__).parent.parent / "infra"))
     from stack import AgentGateStack
 
-    stack = AgentGateStack(App(outdir=str(tmp_path)), "T", engine_url="https://e.example", budget_email="a@b.c")
+    stack = AgentGateStack(App(outdir=str(tmp_path)), "T", engine_url="https://e.example", budget_email="a@b.c", with_cdn=True)
     tpl = assertions.Template.from_stack(stack)
     tpl.has_resource_properties("AWS::DynamoDB::Table", {
         "TimeToLiveSpecification": {"AttributeName": "ttl", "Enabled": True},
         "KeySchema": [{"AttributeName": "trace_id", "KeyType": "HASH"}, {"AttributeName": "seq", "KeyType": "RANGE"}],
     })
+    tpl.has_resource_properties("AWS::ApiGatewayV2::Stage", {
+        "StageName": "$default", "DefaultRouteSettings": {"ThrottlingRateLimit": 10, "ThrottlingBurstLimit": 20}})
+    tpl.resource_count_is("AWS::CloudFront::Function", 1)
+    tpl.has_resource_properties("AWS::ApiGatewayV2::Route", {"RouteKey": "GET /health"})
     tpl.has_resource_properties("AWS::ApiGatewayV2::Route", {"RouteKey": "POST /query"})
     tpl.has_resource_properties("AWS::ApiGatewayV2::Route", {"RouteKey": "GET /trace/{trace_id}"})
     tpl.has_resource_properties("AWS::Lambda::Function", {
@@ -141,3 +185,18 @@ def test_stack_synthesizes_expected_resources(tmp_path: Path, monkeypatch) -> No
     tpl.has_resource_properties("AWS::Budgets::Budget", {"Budget": assertions.Match.object_like(
         {"BudgetLimit": {"Amount": 5, "Unit": "USD"}})})
     tpl.resource_count_is("AWS::CloudFront::Distribution", 1)
+
+
+def test_stack_without_cdn_has_no_cloudfront_or_bucket(tmp_path: Path) -> None:
+    pytest.importorskip("aws_cdk")
+    from aws_cdk import App, assertions
+
+    sys.path.insert(0, str(Path(__file__).parent.parent / "infra"))
+    from stack import AgentGateStack
+
+    stack = AgentGateStack(App(outdir=str(tmp_path)), "T2", engine_url="https://e.example",
+                           budget_email="a@b.c", with_cdn=False)
+    tpl = assertions.Template.from_stack(stack)
+    for t in ("AWS::CloudFront::Distribution", "AWS::CloudFront::Function", "AWS::S3::Bucket"):
+        tpl.resource_count_is(t, 0)
+    tpl.resource_count_is("AWS::ApiGatewayV2::Api", 1)

@@ -20,7 +20,8 @@ BUDGET_USD = 5
 
 class AgentGateStack(Stack):
     def __init__(
-        self, scope: Construct, id: str, *, engine_url: str, budget_email: str, **kwargs: object
+        self, scope: Construct, id: str, *, engine_url: str, budget_email: str, engine_key: str = "", with_cdn: bool = True,
+        **kwargs: object
     ) -> None:
         super().__init__(scope, id, **kwargs)
 
@@ -40,12 +41,12 @@ class AgentGateStack(Stack):
                 memory_size=128, environment=env,
             )
 
-        router = fn("Router", "post_query.handler", ENGINE_URL=engine_url)
+        router = fn("Router", "post_query.handler", ENGINE_URL=engine_url, **({"ENGINE_KEY": engine_key} if engine_key else {}))
         trace = fn("Trace", "get_trace.handler", TRACE_TABLE=table.table_name)
         table.grant_read_data(trace)
 
         api = apigw.HttpApi(
-            self, "Api", api_name="agentgate",
+            self, "Api", api_name="agentgate", create_default_stage=False,
             cors_preflight=apigw.CorsPreflightOptions(
                 allow_origins=["*"], allow_methods=[apigw.CorsHttpMethod.GET, apigw.CorsHttpMethod.POST],
                 allow_headers=["content-type"],
@@ -56,21 +57,46 @@ class AgentGateStack(Stack):
             integration=integrations.HttpLambdaIntegration("RouterInt", router),
         )
         api.add_routes(
+            path="/health", methods=[apigw.HttpMethod.GET],
+            integration=integrations.HttpLambdaIntegration("HealthInt", router),
+        )
+        api.add_routes(
             path="/trace/{trace_id}", methods=[apigw.HttpMethod.GET],
             integration=integrations.HttpLambdaIntegration("TraceInt", trace),
         )
 
-        site = s3.Bucket(
-            self, "Site", block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
-            removal_policy=RemovalPolicy.DESTROY, auto_delete_objects=True,
+        apigw.HttpStage(  # the engine is one Mac: cap what a stranger can push through the tunnel
+            self, "Stage", http_api=api, stage_name="$default", auto_deploy=True,
+            throttle=apigw.ThrottleSettings(rate_limit=10, burst_limit=20),
         )
-        cdn = cloudfront.Distribution(
-            self, "Cdn", default_root_object="index.html",
-            default_behavior=cloudfront.BehaviorOptions(
-                origin=origins.S3BucketOrigin.with_origin_access_control(site),
-                viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-            ),
-        )
+
+        if with_cdn:  # new accounts must be verified by AWS Support before CloudFront works
+            site = s3.Bucket(
+                self, "Site", block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+                removal_policy=RemovalPolicy.DESTROY, auto_delete_objects=True,
+            )
+            # Next static export writes benchmark.html; S3 has no key "benchmark", so rewrite extensionless
+            # paths. default_root_object only covers "/".
+            rewrite = cloudfront.Function(
+                self, "Rewrite", runtime=cloudfront.FunctionRuntime.JS_2_0,
+                code=cloudfront.FunctionCode.from_inline(
+                    "function handler(event) {\n"
+                    "  var r = event.request;\n"
+                    "  if (r.uri.endsWith('/')) r.uri += 'index.html';\n"
+                    "  else if (!r.uri.split('/').pop().includes('.')) r.uri += '.html';\n"
+                    "  return r;\n"
+                    "}"
+                ),
+            )
+            cdn = cloudfront.Distribution(
+                self, "Cdn", default_root_object="index.html",
+                default_behavior=cloudfront.BehaviorOptions(
+                    origin=origins.S3BucketOrigin.with_origin_access_control(site),
+                    viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                    function_associations=[cloudfront.FunctionAssociation(
+                        function=rewrite, event_type=cloudfront.FunctionEventType.VIEWER_REQUEST)],
+                ),
+            )
 
         budgets.CfnBudget(
             self, "Budget",
@@ -92,6 +118,7 @@ class AgentGateStack(Stack):
         )
 
         CfnOutput(self, "ApiUrl", value=api.api_endpoint)
-        CfnOutput(self, "SiteUrl", value=f"https://{cdn.distribution_domain_name}")
-        CfnOutput(self, "SiteBucket", value=site.bucket_name)
+        if with_cdn:
+            CfnOutput(self, "SiteUrl", value=f"https://{cdn.distribution_domain_name}")
+            CfnOutput(self, "SiteBucket", value=site.bucket_name)
         CfnOutput(self, "TraceTable", value=table.table_name)

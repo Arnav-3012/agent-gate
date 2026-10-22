@@ -16,13 +16,14 @@ async function json<T>(res: Response): Promise<T> {
 }
 
 export class EngineClient {
-  constructor(private base: string, private f: Fetch = (...a) => fetch(...a)) {}
+  // runPath: the engine takes POST /run, the AWS API takes POST /query (same body, same 202 {trace_id}).
+  constructor(private base: string, private f: Fetch = (...a) => fetch(...a), private runPath = "/run") {}
 
-  run = async (question: string, arm?: string): Promise<string> =>
-    (await json<{ trace_id: string }>(await this.f(`${this.base}/run`, {
+  run = async (question: string, arm?: string, domain?: string): Promise<string> =>
+    (await json<{ trace_id: string }>(await this.f(`${this.base}${this.runPath}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ question, ...(arm ? { arm } : {}) }),
+      body: JSON.stringify({ question, ...(arm ? { arm } : {}), ...(domain ? { domain } : {}) }),
     }))).trace_id;
 
   trace = async (id: string, after = -1): Promise<TraceView> =>
