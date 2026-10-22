@@ -1,0 +1,57 @@
+PROBLEM: per-query router over arms {7B-rag, 14B-rag, 7B-agent, 14B-agent} finds no signal; fix cheaply before demo
+DOMAINS: ML(routing/uplift) + stats(selection noise, metric noise) + LLM eval
+IN: query + retrieval at serve time   OUT: arm choice   SUCCESS: held-out cascade/router beats RANDOM escalation at same rate AND lowers $/1k vs always-strong at similar F1
+GIVENS: general n=300, finance n=100 (judged, kappa .84), arms share retrieval + Qwen family; M4 24GB; demo soon
+HIDDEN_REQS: label = who is better on THIS query (uplift), not who finds it hard; honest CIs
+ASSUMPTIONS: F1 on short answers is brittle (format variants) -> per-question wins partly metric noise
+OPEN_QS: does a stronger/different arm (hosted, closed-book) create real headroom? does judged score on general shrink noise?
+
+BIG_PICTURE: every test measured DIFFICULTY (top1, gap, entropy, len, self-consistency AUC .47-.60). Routing needs UPLIFT = score(strong)-score(cheap) on that query. Hard-for-7B != helped-by-14B (same family, same retrieval, correlated errors, gold retrieved in 69-76% of RAG errors -> generation/metric bound). Oracle gain (+.09 gen, +.145 fin) <= exchangeable-noise null (+.127, +.169). Arms too similar -> little real per-query headroom.
+CUT: why no signal | cheap fixes ranked by cost/benefit
+
+LEAVES:
+[1] Arm diversity
+  type: system design > arm set
+  why: 7B vs 14B same family/prompt/retrieval; agent = same model + more steps; errors correlated
+  why_not: not a signal-engineering problem: no feature can predict a difference that is not there
+  approaches: keep arms (free) | add hosted Haiku-5.5 RAG as top rung (~$1/400 q, needs approval) | add closed-book 7B / abstain arm (free)
+  pick: add hosted rung + closed-book/abstain; these differ in capability or cost by >5x
+  concept: routing value = variance of per-query uplift x cost gap; both small now (2x cost, ~0.05 F1)
+  trap: tuning more signals on arms that barely differ
+  eval: oracle_breakdown excess over null > 0 on new arm set
+  confidence: med
+[2] Metric noise
+  type: eval > label noise
+  why: F1 on 1-3 token answers is near-binary; one sample/arm; eps .05 labels
+  approaches: judge general with Haiku (~$0.1, 1200 calls) | EM+F1 mix | repeat runs
+  pick: judge general, rerun oracle_breakdown (minutes)
+  concept: selection max of noisy scores inflates oracle; judged score cuts variance
+  trap: reading oracle gap as headroom
+  eval: excess over null
+  confidence: med
+[3] Query-feature classifier
+  type: ML > supervised clf > cost-sensitive, small tabular/embedding
+  why: only remaining no-LLM signal: question type, hops, length, embedding
+  approaches: logistic on type+len | LR on bge embeddings | GBM
+  pick: LR on embeddings, 5-fold, label = strong better by >eps
+  concept: held-out AUC vs 0.5 and vs random escalation
+  trap: fitting thresholds on test set; label imbalance (~7-15% positives)
+  eval: cascade_cv-style held-out vs random
+  confidence: low (expect null)
+[4] Demo framing
+  type: product/story
+  why: honest curve + replay is the deliverable; router can be rule-based by probe categories (out-of-corpus -> abstain)
+  pick: show Pareto + paired CIs + negative signal study; router = explicit policy, claim only what CIs support
+  trap: claiming savings unsupported by random-escalation control
+  confidence: high
+
+DEPENDENCIES: 2 and 3 independent, minutes each; 1 after 2/3 if still null; 4 always
+RISKIEST_LEAF: 1 - without real arm diversity no router passes the random-escalation control
+KEY_FORMULAS:
+  uplift_i = s_strong,i - s_cheap,i ; route if E[uplift|x] > lambda * extra_cost
+  oracle gain null: m = mu + permute_within_question(m - mu)
+GLOSSARY: uplift=per-query benefit of treatment(arm); null=exchangeable arms
+BRAINSTORM_SEEDS:
+- hosted-Haiku rung with price spread 5-10x
+- abstain/closed-book arms from probe set (out-of-corpus)
+- train router on query embeddings with judged labels

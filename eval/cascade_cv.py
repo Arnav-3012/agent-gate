@@ -52,6 +52,13 @@ def cross_validate(cheap: list[dict], strong: list[dict], signal: str = "top1", 
     for f in range(k):
         t = fit_threshold(sig[folds != f], gain[folds != f], extra[folds != f])
         esc[folds == f] = sig[folds == f] < t
+    return summarize(sig, sc, ss, cc, cs, esc, seed)
+
+
+def summarize(sig: np.ndarray, sc: np.ndarray, ss: np.ndarray, cc: np.ndarray, cs: np.ndarray,
+              esc: np.ndarray, seed: int = 0) -> dict:
+    """Held-out metrics of a given escalation decision vs cheap-only and RANDOM escalation at the same rate."""
+    n, gain = len(sc), ss - sc
     casc_score = np.where(esc, ss, sc)
     casc_cost = cc + np.where(esc, cs, 0.0)
     rate = float(esc.mean())
@@ -79,7 +86,7 @@ def main() -> None:
     ap.add_argument("--domain", default="general")
     ap.add_argument("--cheap", required=True)
     ap.add_argument("--strong", required=True)
-    ap.add_argument("--signal", default="top1", choices=["top1", "gap12", "entropy"])
+    ap.add_argument("--signal", default="top1", choices=["top1", "gap12", "entropy", "sc_agree"])
     ap.add_argument("--folds", type=int, default=5)
     a = ap.parse_args()
     arms = with_headline_split(load_files(a.files))[a.domain]

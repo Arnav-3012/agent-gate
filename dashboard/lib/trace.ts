@@ -22,11 +22,12 @@ export interface TraceState {
   hops: string[][]; // chunk ids retrieved at each retrieve event, in order
   path: string[]; // arm ids visited: route, then each escalation target
   lines: ConsoleLine[];
+  events: TraceEvent[]; // raw events in arrival order (rich cards read these)
 }
 
 export const emptyState = (): TraceState => ({
   route: null, steps: 0, tokens: 0, costUsd: 0, latencyS: 0,
-  answer: null, stopReason: null, done: false, lastSeq: -1, t0: null, hops: [], path: [], lines: [],
+  answer: null, stopReason: null, done: false, lastSeq: -1, t0: null, hops: [], path: [], lines: [], events: [],
 });
 
 const describe = (e: TraceEvent): string => {
@@ -51,6 +52,7 @@ export function reduce(state: TraceState, e: TraceEvent): TraceState {
     ...state,
     lastSeq: e.seq,
     t0,
+    events: [...state.events, e],
     lines: [...state.lines, { seq: e.seq, t: e.ts - t0, kind: e.type, text: describe(e) }],
   };
   const llm = llmOf(e);

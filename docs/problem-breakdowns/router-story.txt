@@ -1,0 +1,62 @@
+PROBLEM: make AgentGate's router story meaningful after 6 null signal tests on near-duplicate arms
+DOMAINS: ML(routing = cost-sensitive clf / uplift) + stats(noise null, paired CI) + LLM eval + product story
+IN: query (+ retrieval)   OUT: arm choice   SUCCESS: held-out router beats RANDOM routing at same cost AND oracle excess over noise null > 0
+GIVENS: general 300 Qs (HotpotQA bridge/comparison/single), finance 100; judged scores (Haiku, kappa .84); local 7B/14B Qwen RAG+agent; Haiku 5.5 $0.10/$0.50 per 1M; budget tiny
+HIDDEN_REQS: claims must survive random-routing control; arms must differ in capability AND cost or no router can win
+ASSUMPTIONS: Sonnet 5.5 price $2/$10 per 1M (aggregators; $3/$15 also listed) -> VERIFY on platform.claude.com before using
+OPEN_QS: is HotpotQA near-ceiling for Haiku (then strong rung adds little)? does closed-book 7B beat RAG on popular-entity Qs?
+
+BIG_PICTURE: routing value = (variance of per-query uplift) x (cost gap). Current arms: same family, same retrieval, cost gap 2x, judged 7B~14B (+0.018 ns) -> both factors ~0 -> null is EXPECTED, not a bug. Literature agrees: LLMRouterBench (2026, 400K instances) finds many routers incl. commercial fail to beat simple baselines; RouteLLM wins only with a big weak/strong gap (Mixtral vs GPT-4). Adaptive-RAG routes no-retrieval | single-step | multi-step by query complexity.
+KEY INSIGHT: turn the null into the experiment. 2 arm sets, same eval: (A) same-tier local arms -> router ~ random (have it); (B) cross-tier arms with 20x cost gap -> does routing pay? "When does routing help" is a defensible, novel-for-a-student result.
+CUT: arm set | labels/data size | router method | evaluation | story
+
+LEAVES:
+[1] Cross-tier arm set
+  type: system design > arm portfolio (weak/strong cost ladder)
+  why: router value needs uplift variance + cost gap; current gap 2x, uplift ~0
+  why_not: more signals on same arms -> already 6 nulls
+  approaches: closed-book 7B ($ min, no retrieval) | 7B RAG (have) | Haiku RAG ($0.10/$0.50) | Sonnet 5.5 RAG (~20x Haiku)
+  pick: all 4; keep 14B + agents only in the Pareto plot as measured dominated arms
+  concept: modelled $/1k from verified prices; 7B priced at Haiku rate (stand-in), so Haiku vs 7B is a quality test at equal cost
+  trap: Sonnet best everywhere -> still useful: router sends easy Qs down (RouteLLM-style saving)
+  eval: oracle_breakdown excess over null > 0 on set B
+  confidence: med
+[2] Labels / data size
+  type: data > label noise + n
+  why: 300 Qs, 9-15% positive labels -> classifier has ~30-45 positives
+  approaches: 300 (have) | grow HotpotQA to 1000 (700 fit / 300 test) | preference-style pairwise labels
+  pick: 300 first; grow to 1000 only if set-B excess > 0
+  concept: label = cheapest arm within eps of best (build_router_labels), judged score
+  trap: tuning thresholds on test Qs
+  eval: nested CV (router_clf already does this)
+  confidence: med
+[3] Router method
+  type: ML > multi-class cost-sensitive clf on query embedding | cascade on confidence
+  approaches: rule by question type (baseline) | LR on bge embedding (router_clf, Adaptive-RAG / RouteLLM-BERT analog) | cascade 7B->Haiku->Sonnet on self-consistency
+  pick: LR on embeddings + type baseline; cascade only if a confidence signal shows AUC > .65
+  trap: reporting vs always-cheap instead of vs random at same rate
+  eval: cascade_minus_random_same_rate CI > 0; cost-quality curve with router points
+  confidence: low-med
+[4] Evaluation (have it)
+  type: stats > paired bootstrap + permutation-style null + held-out
+  pick: reuse paired, cascade_cv, oracle_breakdown, router_clf unchanged
+  trap: oracle as headline (it is max of noisy arms)
+  confidence: high
+[5] Story
+  type: product/research framing
+  pick: "Routing helps only when arms differ: same-tier local arms -> router = random (6 signals, CIs); cross-tier arms -> X% cost saved at equal judged accuracy (or also null, then: HotpotQA is too easy for tiering)". Dashboard shows live per-query arm choice + reason + cost.
+  trap: "router saves 40%" vs always-strong without the random control
+  confidence: high
+
+DEPENDENCIES: 1 -> 4 -> (2 if positive) -> 3 -> 5
+RISKIEST_LEAF: 1 - if Haiku is at ceiling on HotpotQA, set B has no uplift either; finance (harder) is the backup domain for set B
+COST: Haiku 400 Qs ~$0.07; Sonnet 400 Qs ~$1.0-1.5 (verify price); judge ~$0.2 -> ~$2 total; 1000-Q scale-up ~$4-5
+TIME: build hosted arm + closed-book mode ~45 min; runs ~30 min (parallel); analysis minutes
+KEY_FORMULAS:
+  value(router) ~ E[max_a (s_a - lambda c_a)] - max_a E[s_a - lambda c_a]
+  label_i = argmin_a c_a s.t. s_ai >= max_b s_bi - eps
+SOURCES: arxiv.org/abs/2601.07206 (LLMRouterBench); lmsys.org/blog/2024-07-01-routellm; arxiv 2403.14403 (Adaptive-RAG)
+BRAINSTORM_SEEDS:
+- 2x2: arm set (same-tier vs cross-tier) x domain (general vs finance)
+- closed-book arm = "no retrieval" path (Adaptive-RAG A-level), cheapest real arm
+- abstain arm for probe-set out-of-corpus Qs

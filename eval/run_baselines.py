@@ -12,6 +12,7 @@ from pathlib import Path
 
 from engine.agent.loop import AgentConfig, run_agent
 from engine.cost.ledger import Ledger, Pricing
+from engine.llm.anthropic_client import AnthropicClient, spent_usd
 from engine.llm.client import LLMClient
 from engine.rag.retriever import Retriever
 from engine.rag.single_pass import FINANCE_SYSTEM, run_rag
@@ -20,7 +21,17 @@ from engine.tracing.emitter import Emitter
 from eval.metrics import exact_match, f1, finance_f1
 from scripts.smoke_eval import OracleRetriever, sample
 
-MODES = ("rag", "agent", "oracle")
+MODES = ("rag", "agent", "oracle", "closed")
+CLOSED_SYSTEM = ("Answer the question from your own knowledge. Reply with the shortest possible answer "
+                 "(a name, date, number, or yes/no), no full sentence. If unsure, give your best guess.")
+
+
+class NoRetriever:
+    """Closed-book arm (D52): no context, so the answer comes from the model's own knowledge."""
+
+    def search(self, query: str, top_k: int | None = None) -> list:
+        return []
+
 
 
 def run_question(q: dict, mode: str, retriever, oracle: OracleRetriever, make_llm: Callable[[], LLMClient],
@@ -31,6 +42,8 @@ def run_question(q: dict, mode: str, retriever, oracle: OracleRetriever, make_ll
     em = Emitter(uuid.uuid4().hex, [], Ledger(pricing, llm.model))
     if mode == "agent":
         pred = run_agent(q["question"], retriever, llm, em, cfg)
+    elif mode == "closed":
+        pred = run_rag(q["question"], NoRetriever(), llm, em, **{**answer_kw, "system": CLOSED_SYSTEM})
     else:
         pred = run_rag(q["question"], oracle if mode == "oracle" else retriever, llm, em, **answer_kw)
     stop = em.events[-1]
@@ -90,6 +103,9 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--model", default=None, help="LLM model id (default: LLM_MODEL env)")
     ap.add_argument("--base-url", default=None, help="LLM server (default: LLM_BASE_URL env)")
+    ap.add_argument("--provider", choices=["local", "anthropic"], default="local",
+                    help="anthropic = hosted arm via the Messages API (needs --model, ANTHROPIC_API_KEY)")
+    ap.add_argument("--max-usd", type=float, default=1.0, help="anthropic: hard spend cap for this process")
     ap.add_argument("--tag", default="", help="suffix for the output file, e.g. 14b")
     ap.add_argument("--out", default=None, help="result file (default eval/runs/baseline_<domain>[_tag].json); "
                     "the fix test uses eval/runs/fixtest_*.json so the smoke_eval baselines stay untouched")
@@ -104,6 +120,8 @@ def main() -> None:
     modes = a.modes.split(",")
     if bad := set(modes) - set(MODES):
         ap.error(f"unknown modes {sorted(bad)}")
+    if a.provider == "anthropic" and (not a.model or "agent" in modes):
+        ap.error("anthropic provider needs --model and supports rag/oracle/closed only (no agent budget test)")
 
     fin = a.domain == "finance"
     rows = [json.loads(l) for l in Path(
@@ -122,12 +140,13 @@ def main() -> None:
     out = Path(a.out or f"eval/runs/baseline_{tag}.json")
     retriever = Retriever.from_config(finance=fin)
     run_baselines(qs, modes, out, a.model, retriever,
-                  lambda: LLMClient(base_url=a.base_url, model=a.model),
+                  (lambda: AnthropicClient(a.model, max_usd=a.max_usd)) if a.provider == "anthropic"
+                  else (lambda: LLMClient(base_url=a.base_url, model=a.model)),
                   finance_f1 if fin else f1, Pricing.from_yaml(), cfg, answer_kw, a.resume,
                   meta={"top_k": cfg.top_k, "metadata_filter": retriever.metadata_filter,
                         "max_tokens": cfg.max_tokens, "max_answer_tokens": cfg.max_answer_tokens,
                         "seed": a.seed, "per_type": a.per_type})
-    print(f"wrote {out}")
+    print(f"wrote {out}" + (f", hosted spend ~${spent_usd():.4f}" if a.provider == "anthropic" else ""))
 
 
 if __name__ == "__main__":

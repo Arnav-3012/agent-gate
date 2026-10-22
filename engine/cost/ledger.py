@@ -17,6 +17,7 @@ class Pricing(BaseModel):
     model_multiplier: dict[str, float] = {}
     retrieval_usd_per_query: float = 0.0
     infra_usd_per_query: float = 0.0
+    local_energy: dict[str, float] = {}  # D53 true-marginal view of local arms: {watts, usd_per_kwh}
 
     @classmethod
     def from_yaml(cls, path: Path = Path("config/pricing.yaml")) -> "Pricing":

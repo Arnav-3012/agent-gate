@@ -7,24 +7,28 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "predev": "mkdir -p public/data && (cp ../eval/results.json public/data/results.json 2>/dev/null || true)",
+    "prebuild": "mkdir -p public/data && (cp ../eval/results.json public/data/results.json 2>/dev/null || true)"
   },
   "dependencies": {
+    "@react-three/drei": "^10.0.0",
+    "@react-three/fiber": "^9.0.0",
+    "@react-three/postprocessing": "^3.2.2",
+    "framer-motion": "^14.5.0",
     "next": "^15.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "zustand": "^5.0.0",
+    "recharts": "^2.15.0",
     "three": "^0.170.0",
-    "@react-three/fiber": "^9.0.0",
-    "@react-three/drei": "^10.0.0",
-    "recharts": "^2.15.0"
+    "zustand": "^5.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
-    "typescript": "^5.6.0",
-    "vitest": "^2.1.0",
+    "@types/react-dom": "^19.0.0",
     "@types/three": "^0.170.0",
-    "@types/react-dom": "^19.0.0"
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
   }
 }

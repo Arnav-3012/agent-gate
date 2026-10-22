@@ -1,0 +1,700 @@
+{
+ "finance": {
+  "n": 100,
+  "arms": {
+   "default/rag": {
+    "f1": 0.215,
+    "f1_ci": [
+     0.14,
+     0.3001249999999993
+    ],
+    "em": 0.0,
+    "cost_per_1k": 0.250927,
+    "latency_p50": 7.418324458994903,
+    "latency_p95": 10.237532181269488,
+    "by_type": {
+     "domain-relevant": {
+      "f1": 0.17,
+      "n": 50
+     },
+     "novel-generated": {
+      "f1": 0.26,
+      "n": 50
+     }
+    },
+    "by_level": {
+     "Information extraction": {
+      "f1": 0.23529411764705882,
+      "n": 17
+     },
+     "Information extraction OR Logical reasoning": {
+      "f1": 0.5,
+      "n": 1
+     },
+     "Information extraction OR Logical reasoning OR": {
+      "f1": 1.0,
+      "n": 1
+     },
+     "Logical reasoning (based on numerical reasoning)": {
+      "f1": 0.0,
+      "n": 5
+     },
+     "Logical reasoning (based on numerical reasoning) OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 5
+     },
+     "Logical reasoning (based on numerical reasoning) OR Numerical reasoning OR Logical reasoning": {
+      "f1": 0.25,
+      "n": 4
+     },
+     "Numerical reasoning": {
+      "f1": 0.2857142857142857,
+      "n": 7
+     },
+     "Numerical reasoning OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 6
+     },
+     "Numerical reasoning OR information extraction": {
+      "f1": 0.0,
+      "n": 4
+     },
+     "n/a": {
+      "f1": 0.26,
+      "n": 50
+     }
+    },
+    "n": 100
+   },
+   "default/agent": {
+    "f1": 0.21,
+    "f1_ci": [
+     0.135,
+     0.29
+    ],
+    "em": 0.0,
+    "cost_per_1k": 0.5420320000000001,
+    "latency_p50": 16.305900770501466,
+    "latency_p95": 21.20710329134308,
+    "by_type": {
+     "domain-relevant": {
+      "f1": 0.16,
+      "n": 50
+     },
+     "novel-generated": {
+      "f1": 0.26,
+      "n": 50
+     }
+    },
+    "by_level": {
+     "Information extraction": {
+      "f1": 0.29411764705882354,
+      "n": 17
+     },
+     "Information extraction OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 1
+     },
+     "Information extraction OR Logical reasoning OR": {
+      "f1": 1.0,
+      "n": 1
+     },
+     "Logical reasoning (based on numerical reasoning)": {
+      "f1": 0.0,
+      "n": 5
+     },
+     "Logical reasoning (based on numerical reasoning) OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 5
+     },
+     "Logical reasoning (based on numerical reasoning) OR Numerical reasoning OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 4
+     },
+     "Numerical reasoning": {
+      "f1": 0.2857142857142857,
+      "n": 7
+     },
+     "Numerical reasoning OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 6
+     },
+     "Numerical reasoning OR information extraction": {
+      "f1": 0.0,
+      "n": 4
+     },
+     "n/a": {
+      "f1": 0.26,
+      "n": 50
+     }
+    },
+    "n": 100
+   },
+   "Qwen2.5-14B-Instruct-4bit/rag": {
+    "f1": 0.27,
+    "f1_ci": [
+     0.18987500000000002,
+     0.355
+    ],
+    "em": 0.0,
+    "cost_per_1k": 0.5162340000000001,
+    "latency_p50": 20.967756957979873,
+    "latency_p95": 29.620243104195104,
+    "by_type": {
+     "domain-relevant": {
+      "f1": 0.24,
+      "n": 50
+     },
+     "novel-generated": {
+      "f1": 0.3,
+      "n": 50
+     }
+    },
+    "by_level": {
+     "Information extraction": {
+      "f1": 0.4117647058823529,
+      "n": 17
+     },
+     "Information extraction OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 1
+     },
+     "Information extraction OR Logical reasoning OR": {
+      "f1": 1.0,
+      "n": 1
+     },
+     "Logical reasoning (based on numerical reasoning)": {
+      "f1": 0.2,
+      "n": 5
+     },
+     "Logical reasoning (based on numerical reasoning) OR Logical reasoning": {
+      "f1": 0.2,
+      "n": 5
+     },
+     "Logical reasoning (based on numerical reasoning) OR Numerical reasoning OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 4
+     },
+     "Numerical reasoning": {
+      "f1": 0.2857142857142857,
+      "n": 7
+     },
+     "Numerical reasoning OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 6
+     },
+     "Numerical reasoning OR information extraction": {
+      "f1": 0.0,
+      "n": 4
+     },
+     "n/a": {
+      "f1": 0.3,
+      "n": 50
+     }
+    },
+    "n": 100
+   },
+   "Qwen2.5-14B-Instruct-4bit/agent": {
+    "f1": 0.245,
+    "f1_ci": [
+     0.165,
+     0.335
+    ],
+    "em": 0.01,
+    "cost_per_1k": 1.11951,
+    "latency_p50": 44.3269771465275,
+    "latency_p95": 56.96609990001888,
+    "by_type": {
+     "domain-relevant": {
+      "f1": 0.2,
+      "n": 50
+     },
+     "novel-generated": {
+      "f1": 0.29,
+      "n": 50
+     }
+    },
+    "by_level": {
+     "Information extraction": {
+      "f1": 0.3235294117647059,
+      "n": 17
+     },
+     "Information extraction OR Logical reasoning": {
+      "f1": 0.5,
+      "n": 1
+     },
+     "Information extraction OR Logical reasoning OR": {
+      "f1": 1.0,
+      "n": 1
+     },
+     "Logical reasoning (based on numerical reasoning)": {
+      "f1": 0.2,
+      "n": 5
+     },
+     "Logical reasoning (based on numerical reasoning) OR Logical reasoning": {
+      "f1": 0.2,
+      "n": 5
+     },
+     "Logical reasoning (based on numerical reasoning) OR Numerical reasoning OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 4
+     },
+     "Numerical reasoning": {
+      "f1": 0.14285714285714285,
+      "n": 7
+     },
+     "Numerical reasoning OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 6
+     },
+     "Numerical reasoning OR information extraction": {
+      "f1": 0.0,
+      "n": 4
+     },
+     "n/a": {
+      "f1": 0.29,
+      "n": 50
+     }
+    },
+    "n": 100
+   }
+  },
+  "oracle_router": {
+   "f1": 0.415,
+   "f1_ci": [
+    0.325,
+    0.515
+   ],
+   "cost_per_1k": 0.34084400000000015,
+   "gain_over_best_fixed": 0.14499999999999996
+  }
+ },
+ "finance_all": {
+  "n": 100,
+  "arms": {
+   "default/rag": {
+    "f1": 0.215,
+    "f1_ci": [
+     0.14,
+     0.295
+    ],
+    "em": 0.0,
+    "cost_per_1k": 0.250927,
+    "latency_p50": 7.418324458994903,
+    "latency_p95": 10.237532181269488,
+    "by_type": {
+     "domain-relevant": {
+      "f1": 0.17,
+      "n": 50
+     },
+     "novel-generated": {
+      "f1": 0.26,
+      "n": 50
+     }
+    },
+    "by_level": {
+     "Information extraction": {
+      "f1": 0.23529411764705882,
+      "n": 17
+     },
+     "Information extraction OR Logical reasoning": {
+      "f1": 0.5,
+      "n": 1
+     },
+     "Information extraction OR Logical reasoning OR": {
+      "f1": 1.0,
+      "n": 1
+     },
+     "Logical reasoning (based on numerical reasoning)": {
+      "f1": 0.0,
+      "n": 5
+     },
+     "Logical reasoning (based on numerical reasoning) OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 5
+     },
+     "Logical reasoning (based on numerical reasoning) OR Numerical reasoning OR Logical reasoning": {
+      "f1": 0.25,
+      "n": 4
+     },
+     "Numerical reasoning": {
+      "f1": 0.2857142857142857,
+      "n": 7
+     },
+     "Numerical reasoning OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 6
+     },
+     "Numerical reasoning OR information extraction": {
+      "f1": 0.0,
+      "n": 4
+     },
+     "n/a": {
+      "f1": 0.26,
+      "n": 50
+     }
+    },
+    "n": 100
+   },
+   "default/agent": {
+    "f1": 0.21,
+    "f1_ci": [
+     0.135,
+     0.29
+    ],
+    "em": 0.0,
+    "cost_per_1k": 0.5420320000000001,
+    "latency_p50": 16.305900770501466,
+    "latency_p95": 21.20710329134308,
+    "by_type": {
+     "domain-relevant": {
+      "f1": 0.16,
+      "n": 50
+     },
+     "novel-generated": {
+      "f1": 0.26,
+      "n": 50
+     }
+    },
+    "by_level": {
+     "Information extraction": {
+      "f1": 0.29411764705882354,
+      "n": 17
+     },
+     "Information extraction OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 1
+     },
+     "Information extraction OR Logical reasoning OR": {
+      "f1": 1.0,
+      "n": 1
+     },
+     "Logical reasoning (based on numerical reasoning)": {
+      "f1": 0.0,
+      "n": 5
+     },
+     "Logical reasoning (based on numerical reasoning) OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 5
+     },
+     "Logical reasoning (based on numerical reasoning) OR Numerical reasoning OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 4
+     },
+     "Numerical reasoning": {
+      "f1": 0.2857142857142857,
+      "n": 7
+     },
+     "Numerical reasoning OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 6
+     },
+     "Numerical reasoning OR information extraction": {
+      "f1": 0.0,
+      "n": 4
+     },
+     "n/a": {
+      "f1": 0.26,
+      "n": 50
+     }
+    },
+    "n": 100
+   },
+   "Qwen2.5-14B-Instruct-4bit/rag": {
+    "f1": 0.27,
+    "f1_ci": [
+     0.185,
+     0.36
+    ],
+    "em": 0.0,
+    "cost_per_1k": 0.5162340000000001,
+    "latency_p50": 20.967756957979873,
+    "latency_p95": 29.620243104195104,
+    "by_type": {
+     "domain-relevant": {
+      "f1": 0.24,
+      "n": 50
+     },
+     "novel-generated": {
+      "f1": 0.3,
+      "n": 50
+     }
+    },
+    "by_level": {
+     "Information extraction": {
+      "f1": 0.4117647058823529,
+      "n": 17
+     },
+     "Information extraction OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 1
+     },
+     "Information extraction OR Logical reasoning OR": {
+      "f1": 1.0,
+      "n": 1
+     },
+     "Logical reasoning (based on numerical reasoning)": {
+      "f1": 0.2,
+      "n": 5
+     },
+     "Logical reasoning (based on numerical reasoning) OR Logical reasoning": {
+      "f1": 0.2,
+      "n": 5
+     },
+     "Logical reasoning (based on numerical reasoning) OR Numerical reasoning OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 4
+     },
+     "Numerical reasoning": {
+      "f1": 0.2857142857142857,
+      "n": 7
+     },
+     "Numerical reasoning OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 6
+     },
+     "Numerical reasoning OR information extraction": {
+      "f1": 0.0,
+      "n": 4
+     },
+     "n/a": {
+      "f1": 0.3,
+      "n": 50
+     }
+    },
+    "n": 100
+   },
+   "Qwen2.5-14B-Instruct-4bit/agent": {
+    "f1": 0.245,
+    "f1_ci": [
+     0.165,
+     0.325
+    ],
+    "em": 0.01,
+    "cost_per_1k": 1.11951,
+    "latency_p50": 44.3269771465275,
+    "latency_p95": 56.96609990001888,
+    "by_type": {
+     "domain-relevant": {
+      "f1": 0.2,
+      "n": 50
+     },
+     "novel-generated": {
+      "f1": 0.29,
+      "n": 50
+     }
+    },
+    "by_level": {
+     "Information extraction": {
+      "f1": 0.3235294117647059,
+      "n": 17
+     },
+     "Information extraction OR Logical reasoning": {
+      "f1": 0.5,
+      "n": 1
+     },
+     "Information extraction OR Logical reasoning OR": {
+      "f1": 1.0,
+      "n": 1
+     },
+     "Logical reasoning (based on numerical reasoning)": {
+      "f1": 0.2,
+      "n": 5
+     },
+     "Logical reasoning (based on numerical reasoning) OR Logical reasoning": {
+      "f1": 0.2,
+      "n": 5
+     },
+     "Logical reasoning (based on numerical reasoning) OR Numerical reasoning OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 4
+     },
+     "Numerical reasoning": {
+      "f1": 0.14285714285714285,
+      "n": 7
+     },
+     "Numerical reasoning OR Logical reasoning": {
+      "f1": 0.0,
+      "n": 6
+     },
+     "Numerical reasoning OR information extraction": {
+      "f1": 0.0,
+      "n": 4
+     },
+     "n/a": {
+      "f1": 0.29,
+      "n": 50
+     }
+    },
+    "n": 100
+   }
+  },
+  "oracle_router": {
+   "f1": 0.415,
+   "f1_ci": [
+    0.325,
+    0.51
+   ],
+   "cost_per_1k": 0.34084400000000015,
+   "gain_over_best_fixed": 0.14499999999999996
+  }
+ },
+ "general": {
+  "n": 300,
+  "arms": {
+   "default/rag": {
+    "f1": 0.6518659469185785,
+    "f1_ci": [
+     0.6024816978343295,
+     0.6992642616155775
+    ],
+    "em": 0.5433333333333333,
+    "cost_per_1k": 0.62514,
+    "latency_p50": 7.261625375016592,
+    "latency_p95": 10.838804504115252,
+    "by_type": {
+     "bridge": {
+      "f1": 0.6036483516483515,
+      "n": 100
+     },
+     "comparison": {
+      "f1": 0.6797765567765568,
+      "n": 100
+     },
+     "single": {
+      "f1": 0.672172932330827,
+      "n": 100
+     }
+    },
+    "by_level": {
+     "easy": {
+      "f1": 0.672172932330827,
+      "n": 100
+     },
+     "hard": {
+      "f1": 0.6417124542124543,
+      "n": 200
+     }
+    },
+    "n": 300
+   },
+   "default/agent": {
+    "f1": 0.6268251821278136,
+    "f1_ci": [
+     0.577045655404537,
+     0.6768133417021573
+    ],
+    "em": 0.5133333333333333,
+    "cost_per_1k": 0.3821873333333334,
+    "latency_p50": 8.629469124483876,
+    "latency_p95": 15.267965732989252,
+    "by_type": {
+     "bridge": {
+      "f1": 0.5653150183150182,
+      "n": 100
+     },
+     "comparison": {
+      "f1": 0.6340265567765567,
+      "n": 100
+     },
+     "single": {
+      "f1": 0.681133971291866,
+      "n": 100
+     }
+    },
+    "by_level": {
+     "easy": {
+      "f1": 0.681133971291866,
+      "n": 100
+     },
+     "hard": {
+      "f1": 0.5996707875457875,
+      "n": 200
+     }
+    },
+    "n": 300
+   },
+   "Qwen2.5-14B-Instruct-4bit/rag": {
+    "f1": 0.7633333333333333,
+    "f1_ci": [
+     0.7149583333333333,
+     0.81
+    ],
+    "em": 0.5866666666666667,
+    "cost_per_1k": 0.2501213333333333,
+    "latency_p50": 8.337565228983294,
+    "latency_p95": 12.324085175030632,
+    "by_type": {
+     "bridge": {
+      "f1": 0.695,
+      "n": 100
+     },
+     "comparison": {
+      "f1": 0.775,
+      "n": 100
+     },
+     "single": {
+      "f1": 0.82,
+      "n": 100
+     }
+    },
+    "by_level": {
+     "easy": {
+      "f1": 0.82,
+      "n": 100
+     },
+     "hard": {
+      "f1": 0.735,
+      "n": 200
+     }
+    },
+    "n": 300
+   },
+   "Qwen2.5-14B-Instruct-4bit/agent": {
+    "f1": 0.7233333333333334,
+    "f1_ci": [
+     0.67,
+     0.7733749999999998
+    ],
+    "em": 0.56,
+    "cost_per_1k": 0.815896,
+    "latency_p50": 26.495683729008306,
+    "latency_p95": 43.948810857671205,
+    "by_type": {
+     "bridge": {
+      "f1": 0.67,
+      "n": 100
+     },
+     "comparison": {
+      "f1": 0.68,
+      "n": 100
+     },
+     "single": {
+      "f1": 0.82,
+      "n": 100
+     }
+    },
+    "by_level": {
+     "easy": {
+      "f1": 0.82,
+      "n": 100
+     },
+     "hard": {
+      "f1": 0.675,
+      "n": 200
+     }
+    },
+    "n": 300
+   }
+  },
+  "oracle_router": {
+   "f1": 0.8621078921078921,
+   "f1_ci": [
+    0.8255909090909092,
+    0.8985465367965367
+   ],
+   "cost_per_1k": 0.279886,
+   "gain_over_best_fixed": 0.09877455877455876
+  }
+ }
+}
